@@ -1,13 +1,10 @@
-# Доступ к локально поднятому сервису из офисной сети: http://<IP компьютера>/ с общим логином и паролем.
-# Временная мера до входа через Telegram. Логин и bcrypt-хеш пароля — в deploy/.env (LAN_USER, LAN_PASSWORD_HASH).
+# Доступ к локально поднятому сервису из офисной сети: http://<IP компьютера>/.
+# Вход — логин и пароль пользователя самого сервиса (страница /login); api и web наружу не открыты.
 {
 	auto_https off
 }
 
 :80 {
-	basic_auth {
-		{$LAN_USER} {$LAN_PASSWORD_HASH}
-	}
 	header {
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY

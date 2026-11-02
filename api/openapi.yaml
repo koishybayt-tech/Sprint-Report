@@ -32,6 +32,20 @@ paths:
       responses:
         '204': { description: Сессия установлена (Set-Cookie) }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Вход по логину и паролю (5 неудачных попыток на логин за 10 минут, дальше 429)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [login, password], properties: { login: { type: string }, password: { type: string } } }
+      responses:
+        '204': { description: Сессия установлена (Set-Cookie adata_session) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Слишком много попыток }
   /auth/logout:
     post:
       tags: [auth]
@@ -42,6 +56,36 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/password:
+    post:
+      tags: [auth]
+      summary: Смена своего пароля (закрывает остальные сессии)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [current, new], properties: { current: { type: string }, new: { type: string, minLength: 10 } } } } } }
+      responses: { '204': { description: OK }, '400': { description: Неверный текущий или слабый новый пароль } }
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: Пользователи сервиса (admin)
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/User' } } } } } }
+    post:
+      tags: [admin]
+      summary: Создать пользователя; без password генерируется и возвращается один раз
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [login, full_name, role], properties: { login: { type: string }, full_name: { type: string }, role: { type: string, enum: [admin, lead, hr, employee] }, password: { type: string }, employee_login: { type: string } } } } } }
+      responses: { '201': { description: Создан }, '409': { description: Логин занят } }
+  /admin/users/{id}:
+    patch:
+      tags: [admin]
+      summary: Изменить имя, роль, активность (последнего активного admin снять нельзя)
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { full_name: { type: string }, role: { type: string, enum: [admin, lead, hr, employee] }, active: { type: boolean } } } } } }
+      responses: { '200': { description: OK } }
+  /admin/users/{id}/password:
+    post:
+      tags: [admin]
+      summary: Сбросить пароль; без password генерируется и возвращается один раз
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
 
   /sprints:
     get:
@@ -265,10 +309,23 @@ components:
         photo_url: { type: string }
         auth_date: { type: integer }
         hash: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        login: { type: string }
+        full_name: { type: string }
+        role: { type: string, enum: [admin, lead, hr, employee] }
+        employee_id: { type: integer, format: int64, nullable: true }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        last_login_at: { type: string, format: date-time, nullable: true }
     Me:
       type: object
       properties:
-        employee_id: { type: integer, format: int64 }
+        id: { type: integer, format: int64 }
+        login: { type: string }
+        employee_id: { type: integer, format: int64, nullable: true }
         full_name: { type: string }
         role: { type: string, enum: [admin, lead, hr, employee] }
     ProjectSprint:

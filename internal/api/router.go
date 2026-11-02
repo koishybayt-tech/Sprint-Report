@@ -11,16 +11,43 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/adata/reports/internal/auth"
 )
 
+// NewRouter. Без входа доступны только /healthz и /auth/*; остальное требует сессию, а права — по роли (docs/security.md).
 func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
+	ah := &authHandlers{users: auth.NewStore(pool), limiter: auth.NewLimiter(5, 10*time.Minute), log: log}
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthz", healthz(pool, log))
-		r.Get("/sprints", sprints(pool, log))
-		r.Get("/sprints/next", nextSprints(pool, log))
-		r.Get("/sprints/report", sprintReport(pool, log))
+		r.Post("/auth/login", ah.login)
+		r.Post("/auth/logout", ah.logout)
+
+		r.Group(func(r chi.Router) {
+			r.Use(ah.requireUser)
+			r.Get("/me", ah.me)
+			r.Post("/me/password", ah.changeOwnPassword)
+
+			// Спринты: все, кроме hr.
+			r.Group(func(r chi.Router) {
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee))
+				r.Get("/sprints", sprints(pool, log))
+				r.Get("/sprints/next", nextSprints(pool, log))
+				r.Get("/sprints/report", sprintReport(pool, log))
+			})
+
+			// Управление пользователями: только admin.
+			r.Route("/admin/users", func(r chi.Router) {
+				r.Use(requireRole(auth.RoleAdmin))
+				r.Get("/", ah.listUsers)
+				r.Post("/", ah.createUser)
+				r.Patch("/{id}", ah.updateUser)
+				r.Post("/{id}/password", ah.resetPassword)
+			})
+		})
 	})
 	return r
 }

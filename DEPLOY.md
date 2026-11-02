@@ -49,6 +49,8 @@ Caddy сам получит HTTPS-сертификат, когда DNS указ�
 
 ## 5. Начальные данные
 ```bash
+# первый администратор; пароль печатается один раз (или задайте его в REPORTS_NEW_PASSWORD)
+$C exec api /app/reports users add --login <логин> --name "<ФИО>" --role admin --employee <логин Jira>
 C="docker compose -f deploy/docker-compose.yml"
 $C cp seed api:/tmp/seed && $C exec api /app/reports seed --dir /tmp/seed      # сотрудники, алиасы TG, праздники
 $C exec api /app/reports sync jira --full                                      # 5–15 минут
@@ -80,7 +82,7 @@ cd /opt/adata-reports && make deploy
 ## Локальная разработка
 ```bash
 # весь стек в docker без HTTPS: api и web — только на этом компьютере (:8080, :3000),
-# коллегам в офисной сети — http://<IP компьютера>/ с логином и паролем LAN_USER / LAN_PASSWORD из deploy/.env
+# коллегам в офисной сети — http://<IP компьютера>/, вход — пользователями сервиса («Настройки» → «Пользователи»)
 # (порты меняются через API_PORT / WEB_PORT / LAN_PORT)
 docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml --env-file deploy/.env up -d --build
 make dev        # postgres в docker, api :8080, web :3000 (прокси /api → 8080)

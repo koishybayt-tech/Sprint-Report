@@ -121,3 +121,35 @@ a.wl.same{border-color:var(--ok);background:var(--ok-soft)}
 .tt li{margin:3px 0}
 .tt li span{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
 .has-tip{cursor:help}
+/* Верхняя панель, вход и настройки */
+.appbar{display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.brand{font-weight:700;color:var(--fg);text-decoration:none}
+.appnav{display:flex;gap:4px;border:0;padding:0;overflow:visible}
+.appnav a{color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:6px}
+.appnav a:hover{color:var(--fg);background:var(--surface)}
+.appnav a.on{color:var(--accent);background:var(--accent-soft)}
+.who-am-i{margin-left:auto;display:flex;align-items:baseline;gap:10px}
+.linkbtn{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+.btn{font:500 13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 14px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn[disabled]{opacity:.6;cursor:default}
+.form-error{color:var(--bad);font-size:13px;margin:0}
+.ok-text{color:var(--ok);font-size:13px}
+.login{min-height:100vh;display:grid;place-items:center;padding:16px}
+.login-card{width:min(360px,100%);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.login-card h1{font-size:20px;margin:0 0 4px}
+.login-card label,.form-grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.login-card input,.form-grid input,.form-grid select,td select{font:14px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+td select{font-size:13px;padding:4px 8px}
+.page-narrow{max-width:1100px;padding-top:16px;display:flex;flex-direction:column;gap:16px}
+.page-narrow h1{font-size:22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.card h2{margin:0}
+.form-grid{display:grid;gap:10px;max-width:420px}
+.form-grid.cols{max-width:none;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:end}
+.form-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;grid-column:1/-1}
+.issued{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:10px 12px;font-size:13px}
+.issued code{font:600 15px var(--f-mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:3px 8px;user-select:all}
+tr.inactive td{color:var(--muted)}
