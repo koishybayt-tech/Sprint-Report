@@ -206,3 +206,29 @@ tr.inactive td{color:var(--muted)}
 .att .atabs button{font:600 15px var(--f-body);color:var(--muted);background:none;border:0;border-bottom:3px solid transparent;padding:10px 16px;cursor:pointer;white-space:nowrap;margin-bottom:-1px}
 .att .atabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
 .att .atabs .cnt{font:500 12px var(--f-mono);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:1px 7px;margin-left:6px}
+
+/* ---------- Карточка сотрудника (reference/employee/page_template.html), стили внутри .emp ---------- */
+.emp{--c-done:#2f7d4f;--c-plan:#1f5e8c;--c-late:#c8562f;--c-off:#e3b27a;--grid:#e8ecf0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .emp{--c-done:#6cc48f;--c-plan:#6fb0e0;--c-late:#e8845f;--c-off:#a77a45;--grid:#26313c}}
+:root[data-theme="dark"] .emp{--c-done:#6cc48f;--c-plan:#6fb0e0;--c-late:#e8845f;--c-off:#a77a45;--grid:#26313c}
+.emp section{display:flex;flex-direction:column;gap:10px;margin-top:22px;min-width:0}
+.emp .card{padding:12px 14px;gap:6px;min-width:0}
+.emp .prof{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:start}
+.emp .prof .who{display:flex;flex-direction:column;gap:4px}
+.emp .prof .who b{font-size:22px}
+.emp .chips{display:flex;flex-wrap:wrap;gap:4px}
+.emp .chip{font:12px var(--f-mono);border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--accent);text-decoration:none}
+.emp .xlink{font-size:13px;font-weight:600;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:3px 10px;background:var(--surface)}
+.emp .verdict{display:flex;flex-direction:column;gap:6px;margin:0;padding:12px 14px;list-style:none}
+.emp .verdict li{display:flex;gap:8px;align-items:baseline}
+.emp .verdict li::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--muted);transform:translateY(-1px)}
+.emp .verdict li.ok::before{background:var(--ok)}.emp .verdict li.warn::before{background:var(--warn)}.emp .verdict li.bad::before{background:var(--bad)}
+.emp .kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-block:0}
+.emp .kpi b{font-size:22px}
+.emp .kpi .cmp{font-size:12px}
+.emp .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
+.emp svg text{fill:var(--muted);font:11px var(--f-body)}
+.emp .spark{display:block}
+.emp .hi{color:var(--bad);font-weight:600}.emp .mid{color:var(--warn);font-weight:600}.emp .good{color:var(--ok);font-weight:600}
+.emp .key{font-family:var(--f-mono);font-size:12px}
+@media (max-width:640px){.emp .prof{grid-template-columns:1fr}}

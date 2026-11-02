@@ -19,45 +19,11 @@ import (
 func attendance(pool *pgxpool.Pool, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		rep, err := loadReport(r, pool)
+		att, err := loadAttendance(r, pool)
 		if err != nil {
 			fail(w, log, "attendance", err)
 			return
 		}
-		if rep == nil {
-			rep = &metrics.SprintReport{Roles: map[string]string{}, Logins: map[string]string{}}
-		}
-		rows, err := db.AttendanceRows(ctx, pool)
-		if err != nil {
-			fail(w, log, "attendance", err)
-			return
-		}
-		staff, err := db.StaffRows(ctx, pool)
-		if err != nil {
-			fail(w, log, "attendance", err)
-			return
-		}
-		since := time.Now().AddDate(-1, 0, 0)
-		abs, err := db.Absences(ctx, pool, since)
-		if err != nil {
-			fail(w, log, "attendance", err)
-			return
-		}
-		tg, err := db.TelegramEvents(ctx, pool, since)
-		if err != nil {
-			fail(w, log, "attendance", err)
-			return
-		}
-		abs = append(abs, metrics.TelegramAbsences(tg, since)...)
-		att := metrics.BuildAttendance(rows, rep, abs, staff, time.Now())
-		if syncs, err := db.LastSyncs(ctx, pool); err == nil {
-			delete(syncs, "jira")
-			if t, err := db.LastTelegramMessage(ctx, pool); err == nil && t != nil {
-				syncs["telegram"] = *t
-			}
-			att.AbsAt = syncs
-		}
-
 		u, _ := auth.FromContext(ctx)
 		self, err := selfName(r, pool, u)
 		if err != nil {
@@ -73,6 +39,46 @@ func attendance(pool *pgxpool.Pool, log *slog.Logger) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, att)
 	}
+}
+
+// loadAttendance собирает ATT без ограничений по ролям (их накладывает вызывающий).
+func loadAttendance(r *http.Request, pool *pgxpool.Pool) (metrics.Attendance, error) {
+	ctx := r.Context()
+	rep, err := loadReport(r, pool)
+	if err != nil {
+		return metrics.Attendance{}, err
+	}
+	if rep == nil {
+		rep = &metrics.SprintReport{Roles: map[string]string{}, Logins: map[string]string{}}
+	}
+	rows, err := db.AttendanceRows(ctx, pool)
+	if err != nil {
+		return metrics.Attendance{}, err
+	}
+	staff, err := db.StaffRows(ctx, pool)
+	if err != nil {
+		return metrics.Attendance{}, err
+	}
+	since := time.Now().AddDate(-1, 0, 0)
+	abs, err := db.Absences(ctx, pool, since)
+	if err != nil {
+		return metrics.Attendance{}, err
+	}
+	tg, err := db.TelegramEvents(ctx, pool, since)
+	if err != nil {
+		return metrics.Attendance{}, err
+	}
+	abs = append(abs, metrics.TelegramAbsences(tg, since)...)
+	att := metrics.BuildAttendance(rows, rep, abs, staff, time.Now())
+	if syncs, err := db.LastSyncs(ctx, pool); err == nil {
+		delete(syncs, "jira")
+		delete(syncs, "jira_history")
+		if t, err := db.LastTelegramMessage(ctx, pool); err == nil && t != nil {
+			syncs["telegram"] = *t
+		}
+		att.AbsAt = syncs
+	}
+	return att, nil
 }
 
 // selfName — ФИО сотрудника, с которым связан пользователь сервиса ("" — не связан).

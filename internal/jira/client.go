@@ -65,27 +65,59 @@ func (c *Client) Myself(ctx context.Context) (User, error) {
 // Search забирает все задачи по JQL пачками (startAt), как search() в inc.js.
 func (c *Client) Search(ctx context.Context, jql, fields string) ([]Issue, error) {
 	var all []Issue
+	err := c.SearchEach(ctx, jql, fields, "", func(page []Issue) error {
+		all = append(all, page...)
+		return nil
+	})
+	return all, err
+}
+
+// SearchEach отдаёт задачи по страницам, не держа в памяти всю выборку (история за год с changelog — сотни МБ).
+// JQL должен сортировать стабильно (ORDER BY key), иначе startAt пропустит задачи.
+func (c *Client) SearchEach(ctx context.Context, jql, fields, expand string, fn func([]Issue) error) error {
 	for start := 0; ; {
 		var page struct {
 			Total  int               `json:"total"`
 			Issues []json.RawMessage `json:"issues"`
 		}
 		q := url.Values{"jql": {jql}, "startAt": {strconv.Itoa(start)}, "maxResults": {"1000"}, "fields": {fields}}
-		if err := c.get(ctx, "/rest/api/2/search", q, &page); err != nil {
-			return nil, err
+		if expand != "" {
+			// С историей 1000 задач — ~16 МБ и почти минута ответа; пачки поменьше укладываются в таймаут.
+			q.Set("expand", expand)
+			q.Set("maxResults", "250")
 		}
+		if err := c.get(ctx, "/rest/api/2/search", q, &page); err != nil {
+			return err
+		}
+		issues := make([]Issue, 0, len(page.Issues))
 		for _, raw := range page.Issues {
 			is, err := parseIssue(raw)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			all = append(all, is)
+			issues = append(issues, is)
+		}
+		if len(issues) > 0 {
+			if err := fn(issues); err != nil {
+				return err
+			}
 		}
 		start += len(page.Issues)
 		if len(page.Issues) == 0 || start >= page.Total {
-			return all, nil
+			return nil
 		}
 	}
+}
+
+// IssueChanges — полная история задачи, когда поиск отдал её обрезанной.
+func (c *Client) IssueChanges(ctx context.Context, key string) ([]Change, error) {
+	var r struct {
+		Changelog rawChangelog `json:"changelog"`
+	}
+	if err := c.get(ctx, "/rest/api/2/issue/"+url.PathEscape(key), url.Values{"expand": {"changelog"}, "fields": {"status"}}, &r); err != nil {
+		return nil, err
+	}
+	return parseChanges(&r.Changelog)
 }
 
 type Project struct {

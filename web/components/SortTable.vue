@@ -2,11 +2,13 @@
 // Сортируемая таблица как table() в reference/sprints/page_template.html:
 // колонка = { h, v, f?, sf?, num?, tip?, cls? }; f возвращает HTML (данные внутри экранируются через esc).
 // ex — раскрываемые строки: key(строка) и sub(строка) → подстроки, их ячейки рисует sf (или f).
+// row — клик по строке (например, открыть карточку); ссылки внутри строки работают как обычно.
 import { type Col, esc } from '~/utils/sprints'
 
 const props = defineProps<{
   cols: Col[]; rows: any[]; init?: [number, 'asc' | 'desc']; empty?: string
   ex?: { key: (r: any) => string; sub: (r: any) => any[] }
+  row?: (r: any) => void
 }>()
 const sk = ref<number | null>(props.init ? props.init[0] : null)
 const dir = ref<'asc' | 'desc'>(props.init ? props.init[1] : 'desc')
@@ -26,7 +28,9 @@ function go(i: number) {
   else { sk.value = i; dir.value = props.cols[i].num ? 'desc' : 'asc' }
 }
 function toggle(r: any, e: Event) {
-  if (!props.ex || (e.target as HTMLElement).closest('a')) return
+  if ((e.target as HTMLElement).closest('a')) return
+  if (props.row) return props.row(r)
+  if (!props.ex) return
   const k = props.ex.key(r), s = new Set(open.value)
   s.has(k) ? s.delete(k) : s.add(k)
   open.value = s
@@ -47,7 +51,7 @@ const subCell = (c: Col, r: any) => c.sf ? c.sf(r) : cell(c, r)
       </thead>
       <tbody>
         <template v-for="(r, ri) in sorted" :key="ex ? ex.key(r) : ri">
-          <tr :class="{ xrow: ex, open: isOpen(r) }" :tabindex="ex ? 0 : undefined"
+          <tr :class="{ xrow: ex || row, open: isOpen(r) }" :tabindex="ex || row ? 0 : undefined"
               :title="ex ? `Нажмите, чтобы ${isOpen(r) ? 'свернуть' : 'раскрыть'}` : undefined"
               @click="toggle(r, $event)" @keydown.enter="toggle(r, $event)">
             <td v-for="(c, ci) in cols" :key="c.h" :class="[c.num ? 'n' : '', c.cls || '']"

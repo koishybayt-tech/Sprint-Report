@@ -16,16 +16,16 @@ import (
 	"github.com/adata/reports/internal/metrics"
 )
 
-// runSync: reports sync jira [--full] | reports sync bitrix.
-// Без --full Jira синхронизируется инкрементально (только изменённые задачи); --full — всё, плюс проекты, тимлиды, справочник.| reports sync bitrix.
-// Для Jira пока есть только полная синхронизация; инкрементальная — следующий этап.
+// runSync: reports sync jira [--full] | reports sync jira-history [--full] | reports sync bitrix.
+// Без --full Jira синхронизируется инкрементально (только изменённые задачи); --full — всё, плюс проекты, тимлиды, справочник.
+// jira-history — задачи года с историей статуса и исполнителя для карточки сотрудника.
 func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 	if len(args) == 0 {
-		return errors.New("укажите источник: reports sync jira [--full] | bitrix")
+		return errors.New("укажите источник: reports sync jira [--full] | jira-history [--full] | bitrix")
 	}
 	source, args := args[0], args[1:]
 	switch source {
-	case "jira":
+	case "jira", "jira-history":
 	case "bitrix":
 		return runSyncBitrix(ctx, log)
 	default:
@@ -50,7 +50,32 @@ func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 		return err
 	}
 	defer pool.Close()
+	if source == "jira-history" {
+		return syncJiraHistory(ctx, log, client, pool, *full)
+	}
 	return syncJira(ctx, log, cfg, client, pool, *full)
+}
+
+// syncJiraHistory — проход истории задач года; без прошлой успешной загрузки делает полную.
+// Если полная уже идёт (в другом процессе) — тихо пропускает.
+func syncJiraHistory(ctx context.Context, log *slog.Logger, client *jira.Client, pool *pgxpool.Pool, full bool) error {
+	t0 := time.Now()
+	st, err := jira.HistorySync(ctx, pool, client, log, full)
+	if errors.Is(err, jira.ErrNoBaseline) {
+		log.Info("sync jira history: загрузок ещё не было — полная за год, это ~20 минут")
+		full = true
+		st, err = jira.HistorySync(ctx, pool, client, log, true)
+	}
+	if errors.Is(err, jira.ErrHistoryRunning) {
+		log.Info("sync jira history: пропуск — полная загрузка уже идёт")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	log.Info("sync jira history: готово", "full", full, "issues", st.Issues, "changes", st.Changes, "refetch", st.Refetch,
+		"window", st.Since, "took", time.Since(t0).Round(time.Second).String())
+	return nil
 }
 
 // syncJira — один проход синхронизации Jira: полный (full) или инкрементальный; общий для команды sync и worker.

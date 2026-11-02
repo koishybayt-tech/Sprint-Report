@@ -10,6 +10,7 @@ const route = useRoute()
       <nav class="appnav" aria-label="Разделы">
         <NuxtLink v-if="canSeeSprints(me)" to="/sprints" :class="{ on: route.path.startsWith('/sprints') }">Спринты</NuxtLink>
         <NuxtLink v-if="me" to="/attendance" :class="{ on: route.path.startsWith('/attendance') }">Посещаемость</NuxtLink>
+        <NuxtLink v-if="me" :to="me.role === 'employee' && me.employee_id ? `/employee/${me.employee_id}` : '/employee'" :class="{ on: route.path.startsWith('/employee') }">Сотрудники</NuxtLink>
         <NuxtLink to="/settings" :class="{ on: route.path.startsWith('/settings') }">Настройки</NuxtLink>
       </nav>
       <div v-if="me" class="who-am-i">

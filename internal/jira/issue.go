@@ -48,11 +48,68 @@ type Issue struct {
 	Resolved    *time.Time
 	TimespentS  int
 	Sprints     []Sprint // в порядке, в котором их отдаёт Jira
+	// История статуса и исполнителя — только если задача запрошена с expand=changelog (синк истории).
+	Changes        []Change
+	ChangesPartial bool // Jira отдала не всю историю — догрузить отдельно
+}
+
+// Change — переход из истории задачи. Статус — названия (как в reference/employee/build_emp.py),
+// исполнитель — логины.
+type Change struct {
+	At    time.Time
+	Field string // status | assignee
+	From  string
+	To    string
+}
+
+type rawChangelog struct {
+	Total     int `json:"total"`
+	Histories []struct {
+		Created string `json:"created"`
+		Items   []struct {
+			Field      string  `json:"field"`
+			FieldType  string  `json:"fieldtype"`
+			From       *string `json:"from"`
+			FromString *string `json:"fromString"`
+			To         *string `json:"to"`
+			ToString   *string `json:"toString"`
+		} `json:"items"`
+	} `json:"histories"`
+}
+
+func parseChanges(cl *rawChangelog) ([]Change, error) {
+	var out []Change
+	str := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+	for _, h := range cl.Histories {
+		at, err := ParseTime(h.Created)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range h.Items {
+			if it.FieldType != "jira" {
+				continue
+			}
+			switch it.Field {
+			case "status":
+				out = append(out, Change{At: at, Field: "status", From: str(it.FromString), To: str(it.ToString)})
+			case "assignee":
+				out = append(out, Change{At: at, Field: "assignee", From: str(it.From), To: str(it.To)})
+			}
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	return out, nil
 }
 
 type rawIssue struct {
-	Key    string `json:"key"`
-	Fields struct {
+	Key       string        `json:"key"`
+	Changelog *rawChangelog `json:"changelog"`
+	Fields    struct {
 		Summary   string `json:"summary"`
 		IssueType struct {
 			Name string `json:"name"`
@@ -86,6 +143,17 @@ func parseIssue(raw json.RawMessage) (Issue, error) {
 	var r rawIssue
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return Issue{}, fmt.Errorf("разбор задачи: %w", err)
+	}
+	if r.Changelog != nil {
+		// История лежит отдельно (jira_changelog), в raw её не храним — она в разы больше самой задачи.
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return Issue{}, err
+		}
+		delete(m, "changelog")
+		if b, err := json.Marshal(m); err == nil {
+			raw = b
+		}
 	}
 	f := r.Fields
 	is := Issue{
@@ -123,6 +191,13 @@ func parseIssue(raw json.RawMessage) (Issue, error) {
 			return is, fmt.Errorf("%s resolutiondate: %w", r.Key, err)
 		}
 		is.Resolved = &t
+	}
+	if r.Changelog != nil {
+		ch, err := parseChanges(r.Changelog)
+		if err != nil {
+			return is, fmt.Errorf("%s changelog: %w", r.Key, err)
+		}
+		is.Changes, is.ChangesPartial = ch, r.Changelog.Total > len(r.Changelog.Histories)
 	}
 	for _, s := range f.Sprints {
 		sp, err := parseSprintValue(s)

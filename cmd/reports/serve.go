@@ -52,6 +52,7 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 }
 
 // runWorker синхронизирует Jira (каждые JIRA_SYNC_EVERY, 30m: изменённые задачи; раз в сутки после JIRA_FULL_SYNC_AT — полная)
+// историю задач года для карточки сотрудника (каждые JIRA_SYNC_EVERY, первая загрузка — полная),
 // и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 30m),
 // оба раза — сразу при старте, и принимает сообщения группы ботом Telegram.
 // Без JIRA_PAT / BITRIX_API_KEY / TG_BOT_TOKEN+TG_CHAT_ID соответствующая часть выключена.
@@ -109,6 +110,23 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 	}
 	runJira()
 	runBitrix()
+	// История задач за год (карточка сотрудника) — отдельно: первая загрузка идёт ~20 минут и не должна держать остальное.
+	if client != nil {
+		go func() {
+			t := time.NewTicker(cfg.JiraSyncEvery)
+			defer t.Stop()
+			for {
+				if err := syncJiraHistory(ctx, log, client, pool, false); err != nil && ctx.Err() == nil {
+					log.Error("worker: история Jira", "err", err)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
 
 	heartbeat := time.NewTicker(time.Minute)
 	defer heartbeat.Stop()

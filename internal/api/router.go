@@ -32,6 +32,9 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 			r.Post("/me/password", ah.changeOwnPassword)
 
 			r.Get("/attendance", attendance(pool, log)) // видимость — по роли внутри
+			empCache := &employeesCache{}
+			r.Get("/employees", employeesList(pool, log, empCache))
+			r.Get("/employees/{id}", employeeCard(pool, log, empCache))
 
 			// Спринты: все, кроме hr.
 			r.Group(func(r chi.Router) {

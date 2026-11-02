@@ -2,6 +2,7 @@ package jira
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -37,5 +38,23 @@ func TestParseIssue(t *testing.T) {
 	if is.Plan != "Внеплановая" || is.Position != "Backend" || is.EpicKey != "ABC-0" || is.Assignee.Name != "ivanov" ||
 		is.TimespentS != 3600 || is.Resolved != nil || len(is.Sprints) != 0 || is.Created.Hour() != 10 {
 		t.Fatalf("разобрали %+v", is)
+	}
+}
+
+func TestParseIssueChangelog(t *testing.T) {
+	raw := []byte(`{"key":"AB-1","changelog":{"total":3,"histories":[
+		{"created":"2026-03-02T10:00:00.000+0500","items":[{"field":"assignee","fieldtype":"jira","from":null,"to":"ivanov","toString":"Иванов"}]},
+		{"created":"2026-03-01T09:00:00.000+0500","items":[{"field":"status","fieldtype":"jira","from":"10100","fromString":"Бэклог","to":"10011","toString":"В работе"},
+			{"field":"Спринт","fieldtype":"custom","to":"5"}]}]},
+		"fields":{"summary":"x","status":{"id":"10011","name":"В работе"},"project":{"key":"AB"},"created":"2026-03-01T08:00:00.000+0500","updated":"2026-03-02T10:00:00.000+0500"}}`)
+	is, err := parseIssue(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(is.Changes) != 2 || is.Changes[0].Field != "status" || is.Changes[0].To != "В работе" || is.Changes[1].To != "ivanov" || !is.ChangesPartial {
+		t.Fatalf("changes: %+v partial=%v", is.Changes, is.ChangesPartial)
+	}
+	if strings.Contains(string(is.Raw), "changelog") {
+		t.Errorf("история осталась в raw")
 	}
 }
