@@ -19,6 +19,7 @@ export type ApiReport = {
   roles: Record<string, string>
   logins: Record<string, string>
   team_leads: string[]
+  inactive: string[]
   testing: Record<string, Record<string, { n: number; logins: string[] }>>
   next: Record<string, { next_id: number; next_name: string; next_start?: string; next_end?: string; next_total: number
     statuses: NameCount[]; by: NameCount[] }>
@@ -64,6 +65,8 @@ export function buildModel(r: ApiReport) {
   return {
     PR, PBY, PEOPLE, NSD,
     QX: r.testers, X: r.bottlenecks, U: r.logins, POS: r.roles, TL: r.team_leads, TST: r.testing,
+    INACT: r.inactive,
+    AX: r.people,
     LEAD: (k: string) => PBY[k]?.lead || '—',
     pname: (k: string) => PBY[k]?.n || k,
     roleOf: (n: string) => r.roles[n] || '—',
@@ -93,6 +96,7 @@ export type Col<T = any> = {
   h: string
   v: (r: T) => string | number
   f?: (r: T) => string
+  sf?: (r: any) => string // ячейка раскрытой подстроки
   num?: boolean
   tip?: string
   cls?: string

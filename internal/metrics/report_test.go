@@ -17,6 +17,8 @@ func TestBuildSprintReport(t *testing.T) {
 			Assignee: "Петров", AssigneeLogin: "petrov", Position: "Backend Developer",
 			Tester: " Сидорова ", TesterLogin: "sidorova",
 			Created: at("2026-10-27 11:00"), Updated: at("2026-11-01 10:00"), Sprints: []Sprint{active}},
+		{Key: "ABC-6", ProjectKey: "ABC", StatusID: "10001", Assignee: "Уволенный", AssigneeInactive: true,
+			Created: at("2026-10-28 10:00"), Updated: at("2026-10-29 10:00"), Sprints: []Sprint{active}},
 		{Key: "ABC-4", ProjectKey: "ABC", StatusID: "888", StatusName: "Blocked", Type: "Задача", Priority: "Высокий",
 			Created: at("2026-10-28 11:00"), Updated: at("2026-11-01 10:00"), Sprints: []Sprint{active}},
 		{Key: "ABC-5", ProjectKey: "ABC", StatusID: "777", StatusName: "Test", Type: "Epic",
@@ -57,6 +59,9 @@ func TestBuildSprintReport(t *testing.T) {
 	// Узкие места: ABC-4 (Blocked) и ABC-1 (без обновлений 43 дн.), по убыванию дней.
 	if len(r.Bottlenecks) != 2 || r.Bottlenecks[0].Key != "ABC-1" || r.Bottlenecks[1].Assignee != Unassigned {
 		t.Errorf("bottlenecks: %+v", r.Bottlenecks)
+	}
+	if len(r.Inactive) != 1 || r.Inactive[0] != "Уволенный" {
+		t.Errorf("inactive: %v", r.Inactive)
 	}
 	n := r.Next["ABC"]
 	if n.NextID == nil || *n.NextID != 11 || n.NextTotal != 2 || n.Statuses[0] != (NameCount{"Сделать", 2}) || len(n.By) != 2 {

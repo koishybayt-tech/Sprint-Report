@@ -30,24 +30,25 @@ type Sprint struct {
 
 // Issue — задача открытого спринта с полями, нужными для расчётов.
 type Issue struct {
-	Key           string
-	ProjectKey    string
-	ProjectName   string
-	StatusID      string
-	StatusName    string
-	Type          string
-	Plan          string
-	Assignee      string // displayName, "" — не назначен
-	AssigneeLogin string
-	Tester        string // displayName поля «Тестировщик» (cf 10902)
-	TesterLogin   string
-	Position      string // cf 11101
-	Summary       string
-	Priority      string
-	Created       time.Time
-	Updated       time.Time
-	TimespentS    int
-	Sprints       []Sprint // в порядке Jira
+	Key              string
+	ProjectKey       string
+	ProjectName      string
+	StatusID         string
+	StatusName       string
+	Type             string
+	Plan             string
+	Assignee         string // displayName, "" — не назначен
+	AssigneeLogin    string
+	AssigneeInactive bool   // пользователь Jira деактивирован (уволен)
+	Tester           string // displayName поля «Тестировщик» (cf 10902)
+	TesterLogin      string
+	Position         string // cf 11101
+	Summary          string
+	Priority         string
+	Created          time.Time
+	Updated          time.Time
+	TimespentS       int
+	Sprints          []Sprint // в порядке Jira
 }
 
 type OldestOpen struct {

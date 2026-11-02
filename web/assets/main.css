@@ -87,3 +87,37 @@ a.wl:hover{border-color:var(--accent);background:var(--accent-soft)}
 .psum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
 .psum b{color:var(--fg);font-family:var(--f-mono);font-weight:600}
 footer{margin-top:28px;color:var(--muted);font-size:12px}
+/* Вкладки по людям и дашборд */
+.flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.flags:empty{display:none}
+.grp{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;padding-block:2px}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tools .chk input{flex:none;max-width:none}
+.tools .gf input{flex:none}
+.gf input{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;max-width:260px}
+.gf input[type=number]{width:72px;font-family:var(--f-mono)}
+tr.xrow{cursor:pointer}tr.xrow:hover td{background:var(--surface)}tr.xrow.open td{border-bottom-color:transparent}.xc{display:inline-block;width:14px;color:var(--muted)}tr.xsub td{background:var(--bg);font-size:12px}tr.xsub td:first-child{padding-left:30px}
+a.pl b{color:var(--fg);margin-left:3px}
+a.wl.same{border-color:var(--ok);background:var(--ok-soft)}
+.pmtag{font-style:normal;font-size:10px;font-weight:700;color:var(--accent);margin-right:4px;letter-spacing:.03em}
+.dh{margin:4px 0 4px;font-size:15px}
+.lbtn{font:inherit;font-weight:600;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.dlpr{display:flex;flex-wrap:wrap;gap:3px;width:150px}.dlpr .pl{display:inline-block;margin:0}
+.nm{display:flex;flex-wrap:wrap;gap:4px;max-width:260px}
+.nm a.pill{text-decoration:none;font-family:var(--f-body,inherit);font-weight:500;white-space:nowrap}
+.dtops{margin-top:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.dtop{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.dtop h3{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.dtop h3 button{font:inherit;font-size:12px;font-weight:400;color:var(--accent);background:none;border:0;cursor:pointer;padding:0}
+.dtop table{width:100%}
+.tt{position:fixed;z-index:50;max-width:min(380px,calc(100vw - 16px));background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px rgb(0 0 0/.22);padding:12px 14px;font-size:12.5px;line-height:1.45}
+.tt a.tl-a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:2px;padding:0 2px;border-radius:3px}
+.tt a.tl-a:hover{background:var(--accent-soft)}
+.tt-f{margin-top:8px;font-size:11px;color:var(--muted)}
+.tt p{margin:4px 0 8px}
+.tt-h{font-weight:600;font-size:13px}
+.tt-s{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ok);font-weight:600;margin-top:6px}
+.tt-s.bad{color:var(--bad)}
+.tt ul{margin:2px 0 0;padding-left:16px}
+.tt li{margin:3px 0}
+.tt li span{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.has-tip{cursor:help}

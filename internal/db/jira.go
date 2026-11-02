@@ -40,7 +40,8 @@ func OpenSprintIssues(ctx context.Context, pool *pgxpool.Pool) ([]metrics.Issue,
 	rows, err = pool.Query(ctx, `SELECT i.key, i.project_key, coalesce(p.name, i.project_key), i.status_id, i.status_name,
 			coalesce(i.type, ''), coalesce(i.plan, ''), coalesce(i.assignee, ''), i.created, i.updated, i.timespent_s, i.sprint_ids,
 			coalesce(i.assignee_login, ''), coalesce(i.tester, ''), coalesce(i.raw->'fields'->'customfield_10902'->>'name', ''),
-			coalesce(i.position, ''), coalesce(i.summary, ''), coalesce(i.priority, '')
+			coalesce(i.position, ''), coalesce(i.summary, ''), coalesce(i.priority, ''),
+			coalesce(i.raw->'fields'->'assignee'->>'active' = 'false', false)
 		FROM jira_issues i LEFT JOIN jira_projects p ON p.key = i.project_key
 		WHERE i.in_open_sprints`)
 	if err != nil {
@@ -51,7 +52,7 @@ func OpenSprintIssues(ctx context.Context, pool *pgxpool.Pool) ([]metrics.Issue,
 		var ids []int64
 		err := r.Scan(&is.Key, &is.ProjectKey, &is.ProjectName, &is.StatusID, &is.StatusName,
 			&is.Type, &is.Plan, &is.Assignee, &is.Created, &is.Updated, &is.TimespentS, &ids,
-			&is.AssigneeLogin, &is.Tester, &is.TesterLogin, &is.Position, &is.Summary, &is.Priority)
+			&is.AssigneeLogin, &is.Tester, &is.TesterLogin, &is.Position, &is.Summary, &is.Priority, &is.AssigneeInactive)
 		for _, id := range ids {
 			if s, ok := sprints[id]; ok {
 				is.Sprints = append(is.Sprints, s)

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Отчёт «Спринты» — повторяет reference/sprints/page_template.html. Колонки вкладок перенесены оттуда 1-в-1.
-// Вкладки людей (загрузка, нужны задачи, перегружены, отсутствия…) — следующий этап.
+// Вкладки по людям — в components/SprintsPeople.vue. «Отсутствия» появятся с Bitrix/Telegram.
 import { type ApiReport, type Col, type P, UNASSIGNED, buildModel, esc, fmt, jiraLinks, lvl, pct, sumOf } from '~/utils/sprints'
+import { defaultCtl, peopleLogic, switchTip } from '~/utils/sprintsPeople'
 
 const { apiBase, jiraBase } = useRuntimeConfig().public
 const route = useRoute()
@@ -13,11 +14,14 @@ const m = computed(() => data.value?.updated_at ? buildModel(data.value) : null)
 // ---------- фильтр по руководителю и вкладка (в query-строке) ----------
 const lead = ref(String(route.query.lead ?? ''))
 const TABS = [
-  ['sprint', 'Статус спринтов'], ['qa', 'Загрузка QA'], ['block', 'Узкие места'], ['stab', 'Стабильность'],
-  ['qual', 'Качество'], ['rel', 'Готовность к релизу'], ['next', 'Следующий спринт'], ['dq', 'Качество данных'],
+  ['dash', 'Дэшборды'], ['sprint', 'Статус спринтов'], ['people', 'Загрузка ресурсов'], ['lres', 'Ресурсы по руководителям'],
+  ['need', 'Нужны задачи'], ['over', 'Перегружены'], ['switch', 'Переключаются между проектами'], ['tl', 'Тимлиды и бэклог'],
+  ['qa', 'Загрузка QA'], ['block', 'Узкие места'], ['stab', 'Стабильность'], ['qual', 'Качество'],
+  ['rel', 'Готовность к релизу'], ['next', 'Следующий спринт'], ['dq', 'Качество данных'],
 ] as const
-const tab = ref(String(route.query.tab ?? 'sprint'))
-watch([lead, tab], ([l, t]) => router.replace({ query: { ...route.query, lead: l || undefined, tab: t === 'sprint' ? undefined : t } }))
+const PEOPLE_TABS = ['dash', 'people', 'lres', 'need', 'over', 'switch', 'tl']
+const tab = ref(String(route.query.tab ?? 'dash'))
+watch([lead, tab], ([l, t]) => router.replace({ query: { ...route.query, lead: l || undefined, tab: t === 'dash' ? undefined : t } }))
 
 const PR = computed(() => m.value?.PR ?? [])
 const leads = computed(() => [...new Set(PR.value.map(p => p.lead))].sort((a, b) => a.localeCompare(b, 'ru'))
@@ -34,15 +38,62 @@ const updated = computed(() => {
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
 })
 
-// ---------- KPI (по проектам; KPI по людям появятся вместе с их вкладками) ----------
+// ---------- пороги вкладок по людям и их логика ----------
+const ctl = useState('sprints-ctl', defaultCtl)
+const pl = computed(() => peopleLogic(m.value!, ctl.value, inS))
+
+// ---------- KPI (без «отсутствуют, а задачи висят» — нет данных об отсутствиях) ----------
 const kpis = computed(() => {
   const P = scopedP.value, T = sumOf(P, 't'), stuck = P.filter(p => p.left < 0).length, NSD = m.value!.NSD
+  const people = Object.keys(m.value!.PEOPLE), need = people.filter(pl.value.needVisible).length, sw = people.filter(pl.value.switchVisible).length
   return [
     [T, 'задач в спринтах', '', 'sprint'], [P.length, 'проектов', '', 'sprint'], [pct(sumOf(P, 'dn'), T) + '%', 'готово', '', 'rel'],
     [stuck, 'спринтов не закрыто', stuck ? 'bad' : '', 'sprint'],
+    [need, 'сотрудникам нужны задачи', need ? 'warn' : '', 'need'], [people.filter(pl.value.overVisible).length, 'перегружены бэклогом', 'bad', 'over'],
+    [sw, 'тормозят чужой проект', sw ? 'bad' : '', 'switch'],
     [P.filter(p => !NSD[p.k] || !NSD[p.k].t).length, 'нет следующего спринта (или пустой)', P.some(p => (!NSD[p.k] || !NSD[p.k].t) && p.left <= 3) ? 'bad' : '', 'next'],
-    [sumOf(P, 'blk'), 'в Blocked', 'bad', 'block'], [sumOf(P, 'bl'), 'в бэклоге', '', 'sprint'],
+    [sumOf(P, 'blk'), 'в Blocked', 'bad', 'block'], [sumOf(P, 'bl'), 'в бэклоге', '', 'people'],
   ] as [string | number, string, string, string][]
+})
+
+// ---------- подсказка «почему тормозит проект» (как .tt в шаблоне) ----------
+const tip = reactive({ html: '', x: 0, y: 0, show: false })
+let tipEl: HTMLElement | null = null
+let tipT: ReturnType<typeof setTimeout> | undefined
+const ttRef = ref<HTMLElement | null>(null)
+async function tipShow(el: HTMLElement) {
+  clearTimeout(tipT)
+  if (tipEl === el && tip.show) return
+  tipEl = el; tip.html = switchTip(el.dataset.tipn!, pl.value, L.value); tip.show = true
+  await nextTick()
+  const r = el.getBoundingClientRect(), w = ttRef.value?.offsetWidth ?? 380, h = ttRef.value?.offsetHeight ?? 200
+  tip.x = Math.min(Math.max(8, r.left), innerWidth - w - 8)
+  tip.y = r.bottom + 4 + h > innerHeight - 8 ? Math.max(8, r.top - h - 4) : r.bottom + 4
+}
+function tipHide() { clearTimeout(tipT); tip.show = false; tipEl = null }
+const onOver = (e: MouseEvent) => { const t = e.target as HTMLElement; const el = t.closest<HTMLElement>('.has-tip'); if (el) tipShow(el); else if (ttRef.value?.contains(t)) clearTimeout(tipT) }
+const onOut = (e: MouseEvent) => {
+  const t = e.target as HTMLElement, from = t.closest('.has-tip') || (ttRef.value?.contains(t) ? ttRef.value : null)
+  if (!from) return
+  const to = e.relatedTarget as Node | null
+  if (to && (ttRef.value?.contains(to) || tipEl?.contains(to))) return
+  clearTimeout(tipT); tipT = setTimeout(tipHide, 350)
+}
+const onClickDoc = (e: MouseEvent) => {
+  const t = e.target as HTMLElement
+  if (ttRef.value?.contains(t)) return
+  const el = t.closest<HTMLElement>('.has-tip')
+  if (el) { tipEl === el && tip.show ? tipHide() : tipShow(el) } else tipHide()
+}
+const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') tipHide() }
+const onScroll = (e: Event) => { if (!ttRef.value?.contains(e.target as Node)) tipHide() }
+onMounted(() => {
+  document.addEventListener('mouseover', onOver); document.addEventListener('mouseout', onOut)
+  document.addEventListener('click', onClickDoc); document.addEventListener('keydown', onKey); addEventListener('scroll', onScroll, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mouseover', onOver); document.removeEventListener('mouseout', onOut)
+  document.removeEventListener('click', onClickDoc); document.removeEventListener('keydown', onKey); removeEventListener('scroll', onScroll, true)
 })
 
 // ---------- общие ячейки ----------
@@ -222,11 +273,14 @@ const notes = computed(() => {
       Данных Jira ещё нет. Запустите синхронизацию: <code>reports sync jira --full</code> (worker делает это сам, если задан JIRA_PAT).
     </div>
     <template v-else>
-      <div class="kpis">
+      <div v-if="tab !== 'dash'" class="kpis">
         <button v-for="[v, l, c, go] in kpis" :key="l" class="kpi" :class="c" style="font:inherit;color:inherit;text-align:left;cursor:pointer" @click="tab = go"><b>{{ v }}</b><span>{{ l }}</span></button>
       </div>
 
-      <section v-if="tab === 'sprint'">
+      <SprintsPeople v-if="PEOPLE_TABS.includes(tab)" :tab="tab" :m="m" :L="L" :pl="pl" :ctl="ctl" :scoped-p="scopedP" :in-s="inS"
+                     @lead="l => { lead = l }" @go="t => { tab = t }" />
+
+      <section v-else-if="tab === 'sprint'">
         <h2>Статус спринтов</h2>
         <p class="lead">Прогресс каждого активного спринта по статусам. Спринт, чья дата окончания прошла, но он не закрыт в Jira, отмечен «Не закрыт».</p>
         <div class="legend">
@@ -289,5 +343,6 @@ const notes = computed(() => {
 
       <footer>Данные выгружены из jira.adata.kz через REST API и обновляются автоматически. Ссылки открывают актуальные задачи в Jira.</footer>
     </template>
+    <div v-show="tip.show" ref="ttRef" class="tt" role="tooltip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }" v-html="tip.html" />
   </div>
 </template>

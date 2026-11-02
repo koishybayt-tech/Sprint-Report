@@ -76,7 +76,8 @@ type SprintReport struct {
 	Roles       map[string]string                   `json:"roles"`  // POS: самая частая «Должность» по задачам человека
 	Logins      map[string]string                   `json:"logins"` // U: имя → логин Jira
 	TeamLeads   []string                            `json:"team_leads"`
-	Testing     map[string]map[string]*TestingCount `json:"testing"` // проект → тестировщик ("" — пусто) → задачи в Test
+	Inactive    []string                            `json:"inactive"` // INACT: деактивированные в Jira исполнители
+	Testing     map[string]map[string]*TestingCount `json:"testing"`  // проект → тестировщик ("" — пусто) → задачи в Test
 	Next        map[string]NextSprint               `json:"next"`
 }
 
@@ -120,6 +121,9 @@ func BuildSprintReport(issues []Issue, leads map[string]string, teamLeads []stri
 			n = Unassigned
 		} else {
 			r.Logins[n] = f.AssigneeLogin
+			if f.AssigneeInactive && !contains(r.Inactive, n) {
+				r.Inactive = append(r.Inactive, n)
+			}
 		}
 		if f.Position != "" {
 			c := posc[n]
@@ -243,6 +247,10 @@ func BuildSprintReport(issues []Issue, leads map[string]string, teamLeads []stri
 	}
 	if r.Testers == nil {
 		r.Testers = []TesterProject{}
+	}
+	sort.Strings(r.Inactive)
+	if r.Inactive == nil {
+		r.Inactive = []string{}
 	}
 	if r.Bottlenecks == nil {
 		r.Bottlenecks = []Bottleneck{}
