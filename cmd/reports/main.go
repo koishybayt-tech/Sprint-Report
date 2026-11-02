@@ -1,4 +1,4 @@
-// Command reports — единый бинарь сервиса: serve | worker | migrate | seed | sync | healthcheck.
+// Command reports — единый бинарь сервиса: serve | worker | migrate | seed | sync | bitrix | healthcheck.
 package main
 
 import (
@@ -18,6 +18,8 @@ const usage = `использование: reports <команда> [флаги]
   migrate      применить миграции БД (goose up)
   seed --dir   загрузить сотрудников, алиасы Telegram и праздники из CSV
   sync jira    синхронизировать задачи открытых спринтов из Jira (--full)
+  sync bitrix  синхронизировать отпуска из API отпусков Bitrix
+  bitrix probe --id <табельный ID>  сырой ответ API отпусков (ключ замаскирован)
   healthcheck  проверить /api/v1/healthz локального serve (для HEALTHCHECK)
 `
 
@@ -45,6 +47,8 @@ func main() {
 		err = runSeed(ctx, log, args)
 	case "sync":
 		err = runSync(ctx, log, args)
+	case "bitrix":
+		err = runBitrix(ctx, args)
 	case "healthcheck":
 		err = runHealthcheck(ctx)
 	case "-h", "--help", "help":

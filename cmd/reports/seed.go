@@ -62,7 +62,8 @@ func runSeed(ctx context.Context, log *slog.Logger, args []string) error {
 	return tx.Commit(ctx)
 }
 
-// employees.csv: full_name,jira_login,position,team_lead,project_lead,staff,left.
+// employees.csv: full_name,jira_login,position,team_lead,project_lead,staff,left,tab_id.
+// tab_id — табельный ID для API отпусков, если он не совпадает с email в Jira (пусто — берётся из email).
 // team_lead/project_lead в CSV — флаги 0/1, а в схеме это текст (имя руководителя), поэтому пока не загружаются.
 // Если jira_login уже занят другим ФИО, строка пропускается с предупреждением — дубль надо разрешить в CSV.
 func seedEmployees(ctx context.Context, tx pgx.Tx, rows []map[string]string) (int, int, error) {
@@ -83,12 +84,12 @@ func seedEmployees(ctx context.Context, tx pgx.Tx, rows []map[string]string) (in
 			}
 		}
 		_, err := tx.Exec(ctx, `
-			INSERT INTO employees (full_name, jira_login, position, staff)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO employees (full_name, jira_login, position, staff, tab_id)
+			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (full_name) DO UPDATE
 			SET jira_login = EXCLUDED.jira_login, position = EXCLUDED.position,
-			    staff = EXCLUDED.staff, updated_at = now()`,
-			r["full_name"], nullable(r["jira_login"]), nullable(r["position"]), r["staff"] == "1")
+			    staff = EXCLUDED.staff, tab_id = EXCLUDED.tab_id, updated_at = now()`,
+			r["full_name"], nullable(r["jira_login"]), nullable(r["position"]), r["staff"] == "1", nullable(r["tab_id"]))
 		if err != nil {
 			return n, skipped, fmt.Errorf("%s: %w", r["full_name"], err)
 		}

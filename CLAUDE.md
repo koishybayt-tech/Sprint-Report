@@ -15,7 +15,7 @@ cmd/reports/          # один бинарь: serve | worker | seed | sync | im
 internal/config       # env → struct
 internal/db           # sqlc-сгенерированный код + migrations/
 internal/jira         # клиент Jira DC (PAT), инкрементальная синхронизация
-internal/bitrix       # отпуска/БС через входящий вебхук
+internal/bitrix       # отпуска и БС из API отпусков Bitrix (vacation_api.php)
 internal/tgbot        # вебхук бота, запись raw-сообщений
 internal/tgparse      # РАЗБОР СООБЩЕНИЙ — уже написан, покрыт тестами
 internal/metrics      # формулы из docs/metrics.md

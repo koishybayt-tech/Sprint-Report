@@ -129,3 +129,10 @@ func (c *Client) FutureSprints(ctx context.Context, boardID int64) ([]AgileSprin
 		url.Values{"state": {"future"}, "maxResults": {"50"}}, &r)
 	return r.Values, err
 }
+
+// UserByLogin — пользователь Jira по логину (нужен email: из него берётся табельный ID).
+func (c *Client) UserByLogin(ctx context.Context, login string) (User, error) {
+	var u User
+	err := c.get(ctx, "/rest/api/2/user", url.Values{"username": {login}}, &u)
+	return u, err
+}

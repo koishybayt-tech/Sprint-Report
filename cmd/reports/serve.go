@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/adata/reports/internal/api"
+	"github.com/adata/reports/internal/bitrix"
 	"github.com/adata/reports/internal/config"
 	"github.com/adata/reports/internal/db"
 	"github.com/adata/reports/internal/jira"
@@ -49,8 +50,8 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 	return nil
 }
 
-// runWorker синхронизирует Jira при старте и затем каждые JIRA_SYNC_EVERY (по умолчанию 15m).
-// Без JIRA_PAT синхронизация выключена, worker только пишет в лог, что жив.
+// runWorker синхронизирует Jira (каждые JIRA_SYNC_EVERY, 15m) и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 2h),
+// оба раза — сразу при старте. Без JIRA_PAT / BITRIX_API_KEY соответствующая синхронизация выключена.
 func runWorker(ctx context.Context, log *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -66,7 +67,11 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		log.Warn("worker: синхронизация Jira выключена", "reason", err.Error())
 	}
-	log.Info("worker: запущен", "jira_sync_every", cfg.JiraSyncEvery.String())
+	bx, err := bitrix.New(cfg.BitrixVacationURL, cfg.BitrixAPIKey)
+	if err != nil {
+		log.Warn("worker: синхронизация Bitrix выключена", "reason", err.Error())
+	}
+	log.Info("worker: запущен", "jira_sync_every", cfg.JiraSyncEvery.String(), "bitrix_sync_every", cfg.BitrixSyncEvery.String())
 	runJira := func() {
 		if client == nil {
 			return
@@ -75,12 +80,23 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 			log.Error("worker: синхронизация Jira", "err", err)
 		}
 	}
+	runBitrix := func() {
+		if bx == nil {
+			return
+		}
+		if err := syncBitrix(ctx, log, bx, client, pool); err != nil && ctx.Err() == nil {
+			log.Error("worker: синхронизация Bitrix", "err", err)
+		}
+	}
 	runJira()
+	runBitrix()
 
 	heartbeat := time.NewTicker(time.Minute)
 	defer heartbeat.Stop()
 	jiraTick := time.NewTicker(cfg.JiraSyncEvery)
 	defer jiraTick.Stop()
+	bitrixTick := time.NewTicker(cfg.BitrixSyncEvery)
+	defer bitrixTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,6 +106,8 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 			log.Info("worker: жив")
 		case <-jiraTick.C:
 			runJira()
+		case <-bitrixTick.C:
+			runBitrix()
 		}
 	}
 }

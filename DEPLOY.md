@@ -7,7 +7,7 @@
 | **Доступ сервера к jira.adata.kz** | если Jira только из офиса/VPN — сервер внутри сети или с туннелем | DevOps |
 | Поддомен, например `reports.adata.kz`, A-запись на IP сервера | DNS | DevOps |
 | Jira PAT сервисного пользователя (только чтение) | Jira → Профиль → Personal Access Tokens | админ Jira |
-| Входящий вебхук Bitrix24 (только чтение) | Bitrix → Разработчикам → Входящий вебхук | админ Bitrix |
+| Ключ API отпусков Bitrix (`BITRIX_API_KEY`) | владелец bitrix.avh.kz | админ Bitrix |
 | Telegram-бот | @BotFather → /newbot; затем /setprivacy → **Disable** | вы |
 | Бот — администратор группы «Adata Group» | настройки группы | админ группы |
 | Экспорт истории группы (JSON) | Telegram Desktop → группа → ⋮ → Export chat history → JSON, без медиа | админ группы |
@@ -32,7 +32,7 @@ cd /opt/adata-reports
 cp deploy/.env.example deploy/.env && chmod 600 deploy/.env
 openssl rand -hex 32   # → SESSION_SECRET
 openssl rand -hex 24   # → TG_WEBHOOK_SECRET
-nano deploy/.env       # DOMAIN, POSTGRES_PASSWORD, JIRA_PAT, BITRIX_WEBHOOK_URL, TG_*, ADMIN_TG_IDS
+nano deploy/.env       # DOMAIN, POSTGRES_PASSWORD, JIRA_PAT, BITRIX_API_KEY, TG_*, ADMIN_TG_IDS
 ```
 Проверка Jira-токена с сервера:
 ```bash

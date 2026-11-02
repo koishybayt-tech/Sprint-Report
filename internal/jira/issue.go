@@ -10,9 +10,10 @@ import (
 )
 
 type User struct {
-	Name        string `json:"name"` // логин
-	DisplayName string `json:"displayName"`
-	Active      bool   `json:"active"`
+	Name         string `json:"name"` // логин
+	DisplayName  string `json:"displayName"`
+	EmailAddress string `json:"emailAddress"`
+	Active       bool   `json:"active"`
 }
 
 // Sprint — разобранное значение поля «Спринт» (customfield_10104).

@@ -15,13 +15,18 @@ import (
 	"github.com/adata/reports/internal/jira"
 )
 
-// runSync: reports sync jira [--full]. Пока есть только полная синхронизация; инкрементальная — следующий этап.
+// runSync: reports sync jira [--full] | reports sync bitrix.
+// Для Jira пока есть только полная синхронизация; инкрементальная — следующий этап.
 func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 	if len(args) == 0 {
-		return errors.New("укажите источник: reports sync jira [--full]")
+		return errors.New("укажите источник: reports sync jira [--full] | bitrix")
 	}
 	source, args := args[0], args[1:]
-	if source != "jira" {
+	switch source {
+	case "jira":
+	case "bitrix":
+		return runSyncBitrix(ctx, log)
+	default:
 		return fmt.Errorf("источник %q пока не поддерживается", source)
 	}
 	fs := flag.NewFlagSet("sync jira", flag.ContinueOnError)

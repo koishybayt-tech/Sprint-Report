@@ -9,7 +9,7 @@ Browser ──HTTPS──► Caddy ──/api/*──► api (Go, chi) ──►
                                             │
                          worker (Go) ───────┘
                            ├─ Jira DC  (REST v2, PAT)      каждые 15 мин инкрементально, ночью полный
-                           ├─ Bitrix24 (входящий вебхук)   каждые 2 ч: отпуска, БС
+                           ├─ Bitrix (API отпусков)          каждые 2 ч: отпуска, БС
                            └─ пересчёт агрегатов, снепшоты, Excel
 ```
 
@@ -37,7 +37,7 @@ Browser ──HTTPS──► Caddy ──/api/*──► api (Go, chi) ──►
 - История до запуска бота: экспорт Telegram Desktop (JSON) → `reports import-telegram --file result.json` (идемпотентно по `message_id`).
 
 ## Bitrix (`internal/bitrix`)
-Входящий вебхук `BITRIX_WEBHOOK_URL` (секрет, только env). Отпуска и БС из графика отсутствий → `absences(source='bitrix')`. Больничные — из Telegram и Bitrix, дедуп по (сотрудник, дата).
+Свой API отпусков: `GET $BITRIX_VACATION_URL?id=<табельный ID>&api_key=$BITRIX_API_KEY` (ключ — секрет, только env). Табельный ID — часть email сотрудника в Jira до «@» (`/rest/api/2/user?username=<логин>`), для нетабельных email — колонка `tab_id` в `seed/employees.csv`. Берутся «Трудовой отпуск» → `vacation` и «Отпуск б/с» → `unpaid`, статус «Прерван» пропускается → `absences(source='bitrix')`. Больничные — только из Telegram. Синхронизация — worker раз в `BITRIX_SYNC_EVERY` (2h), вручную `reports sync bitrix`, сырой ответ — `reports bitrix probe --id <табельный ID>`.
 
 ## Авторизация
 Telegram Login Widget (сотрудник уже есть в `tg_aliases`) или OIDC компании, если появится. Сессия — httpOnly cookie. Роли: `admin`, `lead` (руководители/ПМ/тимлиды), `hr`, `employee`. См. `security.md`.

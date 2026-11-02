@@ -16,24 +16,41 @@ type Config struct {
 	JiraPAT     string // JIRA_PAT — секрет, не логировать
 	// JIRA_SYNC_EVERY, по умолчанию 15m
 	JiraSyncEvery time.Duration
+
+	BitrixVacationURL string // BITRIX_VACATION_URL, по умолчанию https://bitrix.avh.kz/api/v1/vacation_api.php
+	BitrixAPIKey      string // BITRIX_API_KEY — секрет, идёт в query, в логах маскируется
+	// BITRIX_SYNC_EVERY, по умолчанию 2h
+	BitrixSyncEvery time.Duration
 }
 
 func Load() (Config, error) {
 	c := Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
-		JiraBaseURL: strings.TrimRight(getenv("JIRA_BASE_URL", "https://jira.adata.kz"), "/"),
-		JiraPAT:     strings.TrimSpace(os.Getenv("JIRA_PAT")),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		HTTPAddr:          getenv("HTTP_ADDR", ":8080"),
+		JiraBaseURL:       strings.TrimRight(getenv("JIRA_BASE_URL", "https://jira.adata.kz"), "/"),
+		JiraPAT:           strings.TrimSpace(os.Getenv("JIRA_PAT")),
+		BitrixVacationURL: getenv("BITRIX_VACATION_URL", "https://bitrix.avh.kz/api/v1/vacation_api.php"),
+		BitrixAPIKey:      strings.TrimSpace(os.Getenv("BITRIX_API_KEY")),
 	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("DATABASE_URL не задан")
 	}
-	every, err := time.ParseDuration(getenv("JIRA_SYNC_EVERY", "15m"))
-	if err != nil || every < time.Minute {
-		return c, fmt.Errorf("JIRA_SYNC_EVERY: ожидается длительность не меньше 1m, например 15m")
+	var err error
+	if c.JiraSyncEvery, err = duration("JIRA_SYNC_EVERY", "15m"); err != nil {
+		return c, err
 	}
-	c.JiraSyncEvery = every
+	if c.BitrixSyncEvery, err = duration("BITRIX_SYNC_EVERY", "2h"); err != nil {
+		return c, err
+	}
 	return c, nil
+}
+
+func duration(key, def string) (time.Duration, error) {
+	d, err := time.ParseDuration(getenv(key, def))
+	if err != nil || d < time.Minute {
+		return 0, fmt.Errorf("%s: ожидается длительность не меньше 1m, например %s", key, def)
+	}
+	return d, nil
 }
 
 func getenv(key, def string) string {
