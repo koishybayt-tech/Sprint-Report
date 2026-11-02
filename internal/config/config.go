@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +22,9 @@ type Config struct {
 	BitrixAPIKey      string // BITRIX_API_KEY — секрет, идёт в query, в логах маскируется
 	// BITRIX_SYNC_EVERY, по умолчанию 2h
 	BitrixSyncEvery time.Duration
+
+	TgBotToken string // TG_BOT_TOKEN — секрет, не логировать
+	TgChatID   int64  // TG_CHAT_ID — группа «Adata Group» (отрицательное число)
 }
 
 func Load() (Config, error) {
@@ -31,6 +35,7 @@ func Load() (Config, error) {
 		JiraPAT:           strings.TrimSpace(os.Getenv("JIRA_PAT")),
 		BitrixVacationURL: getenv("BITRIX_VACATION_URL", "https://bitrix.avh.kz/api/v1/vacation_api.php"),
 		BitrixAPIKey:      strings.TrimSpace(os.Getenv("BITRIX_API_KEY")),
+		TgBotToken:        strings.TrimSpace(os.Getenv("TG_BOT_TOKEN")),
 	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("DATABASE_URL не задан")
@@ -41,6 +46,11 @@ func Load() (Config, error) {
 	}
 	if c.BitrixSyncEvery, err = duration("BITRIX_SYNC_EVERY", "2h"); err != nil {
 		return c, err
+	}
+	if v := strings.TrimSpace(os.Getenv("TG_CHAT_ID")); v != "" {
+		if c.TgChatID, err = strconv.ParseInt(v, 10, 64); err != nil {
+			return c, fmt.Errorf("TG_CHAT_ID: ожидается число, например -459179610")
+		}
 	}
 	return c, nil
 }

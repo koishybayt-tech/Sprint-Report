@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,5 +92,46 @@ func TestAttachAbsences(t *testing.T) {
 	}
 	if _, ok := r.AbsencesAt["bitrix"]; !ok {
 		t.Error("нет absences_at")
+	}
+}
+
+func TestTelegramAbsences(t *testing.T) {
+	d := func(s string) time.Time { x, _ := time.Parse("2006-01-02", s); return x }
+	i := func(v int) *int { return &v }
+	ev := []TgEvent{
+		// больничный пт 30.10 и пн 02.11 — один период через выходные; вт 03.11 дублем из второго сообщения
+		{Login: "ivanov", FullName: "Иванов", Day: d("2026-10-30"), Kind: "sick"},
+		{Login: "ivanov", FullName: "Иванов", Day: d("2026-11-02"), Kind: "sick"},
+		{Login: "ivanov", FullName: "Иванов", Day: d("2026-11-03"), Kind: "sick"},
+		{Login: "ivanov", FullName: "Иванов", Day: d("2026-11-03"), Kind: "sick"},
+		// старый больничный, закончился до среза — не нужен
+		{Login: "ivanov", FullName: "Иванов", Day: d("2026-10-20"), Kind: "sick"},
+		// отпросился: 9:00–10:00 + 15:00–16:30 = 2 ч 30 мин → off; 30 минут — нет; «весь день» — off
+		{Login: "petrov", FullName: "Петров", Day: d("2026-11-02"), Kind: "late", FromMin: i(540), ToMin: i(600), Minutes: 60},
+		{Login: "petrov", FullName: "Петров", Day: d("2026-11-02"), Kind: "mid", FromMin: i(900), ToMin: i(990), Minutes: 90},
+		{Login: "petrov", FullName: "Петров", Day: d("2026-11-04"), Kind: "mid", FromMin: i(600), ToMin: i(630), Minutes: 30},
+		{Login: "petrov", FullName: "Петров", Day: d("2026-11-05"), Kind: "day", FromMin: i(540), ToMin: i(1080), Minutes: 480},
+		{Login: "petrov", FullName: "Петров", Day: d("2026-10-29"), Kind: "day", Minutes: 480}, // до среза
+	}
+	rows := TelegramAbsences(ev, d("2026-11-02"))
+	got := []string{}
+	for _, r := range rows {
+		got = append(got, r.Login+" "+r.Kind+" "+r.From.Format("01-02")+"…"+r.To.Format("01-02")+" "+r.Note)
+	}
+	want := []string{
+		"ivanov sick 10-30…11-03 Больничный",
+		"petrov off 11-02…11-02 Отпросился: 9:00–10:00, 15:00–16:30 (2 ч 30 мин)",
+		"petrov off 11-05…11-05 Отпросился: весь день",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("получили:\n%s\nждали:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	// Больничный, пересекающийся с отпуском Bitrix, не дублируется; «отпросился» в отпуск — тоже.
+	r := SprintReport{Logins: map[string]string{"Иванов": "ivanov", "Петров": "petrov"}}
+	vacTo := d("2026-11-06")
+	AttachAbsences(&r, append([]AbsenceRow{{Login: "ivanov", Kind: "vacation", From: d("2026-11-03"), To: &vacTo, Source: "bitrix"}}, rows...), nil)
+	if len(r.Absences) != 3 || r.Absences[1].Type != "off" || r.Absences[1].Source != "Telegram" {
+		t.Errorf("absences: %+v", r.Absences)
 	}
 }

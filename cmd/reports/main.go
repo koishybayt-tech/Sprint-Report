@@ -1,4 +1,4 @@
-// Command reports — единый бинарь сервиса: serve | worker | migrate | seed | sync | bitrix | users | healthcheck.
+// Command reports — единый бинарь сервиса: serve | worker | migrate | seed | sync | bitrix | users | import-telegram | healthcheck.
 package main
 
 import (
@@ -21,6 +21,7 @@ const usage = `использование: reports <команда> [флаги]
   sync bitrix  синхронизировать отпуска из API отпусков Bitrix
   bitrix probe --id <табельный ID>  сырой ответ API отпусков (ключ замаскирован)
   users add --login --name --role  создать пользователя (первого admin; остальных — в «Настройках»)
+  import-telegram --file result.json  история группы из экспорта Telegram Desktop
   healthcheck  проверить /api/v1/healthz локального serve (для HEALTHCHECK)
 `
 
@@ -52,6 +53,8 @@ func main() {
 		err = runBitrix(ctx, args)
 	case "users":
 		err = runUsers(ctx, log, args)
+	case "import-telegram":
+		err = runImportTelegram(ctx, log, args)
 	case "healthcheck":
 		err = runHealthcheck(ctx)
 	case "-h", "--help", "help":

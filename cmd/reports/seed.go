@@ -99,22 +99,32 @@ func seedEmployees(ctx context.Context, tx pgx.Tx, rows []map[string]string) (in
 }
 
 // tg_aliases.csv: tg_display_name,full_name,jira_name,jira_login,source.
-// Сотрудник ищется по jira_login; строки без логина или с неизвестным логином пропускаются.
+// full_name — как человек подписывается в сообщениях (сохраняется в fio). Сотрудник ищется по jira_login,
+// а без него — по jira_name или full_name среди ФИО сотрудников. Ненайденные строки пропускаются.
 func seedAliases(ctx context.Context, tx pgx.Tx, rows []map[string]string) (int, int, error) {
 	n, skipped := 0, 0
 	for _, r := range rows {
-		tag, err := tx.Exec(ctx, `
-			INSERT INTO tg_aliases (employee_id, tg_display)
-			SELECT e.id, $2 FROM employees e
-			WHERE e.jira_login = $1
-			  AND NOT EXISTS (SELECT 1 FROM tg_aliases a WHERE a.employee_id = e.id AND a.tg_display = $2)`,
-			r["jira_login"], r["tg_display_name"])
+		var empID int64
+		err := tx.QueryRow(ctx, `SELECT id FROM employees
+			WHERE ($1 <> '' AND jira_login = $1) OR ($1 = '' AND full_name IN ($2, $3))
+			ORDER BY (jira_login = $1) DESC LIMIT 1`, r["jira_login"], r["jira_name"], r["full_name"]).Scan(&empID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			skipped++ // «не определён», «нет в Jira» или сотрудник не найден
+			continue
+		}
 		if err != nil {
 			return n, skipped, fmt.Errorf("%s: %w", r["tg_display_name"], err)
 		}
+		tag, err := tx.Exec(ctx, `UPDATE tg_aliases SET fio = nullif($3, '') WHERE employee_id = $1 AND tg_display = $2`,
+			empID, r["tg_display_name"], r["full_name"])
+		if err != nil {
+			return n, skipped, err
+		}
 		if tag.RowsAffected() == 0 {
-			skipped++ // нет логина, логин не найден или алиас уже есть
-			continue
+			if _, err := tx.Exec(ctx, `INSERT INTO tg_aliases (employee_id, tg_display, fio) VALUES ($1, $2, nullif($3, ''))`,
+				empID, r["tg_display_name"], r["full_name"]); err != nil {
+				return n, skipped, fmt.Errorf("%s: %w", r["tg_display_name"], err)
+			}
 		}
 		n++
 	}

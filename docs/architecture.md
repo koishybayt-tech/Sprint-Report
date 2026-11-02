@@ -31,6 +31,10 @@ Browser ──HTTPS──► Caddy ──/api/*──► api (Go, chi) ──►
 4. После sync — пересчёт `sprint_daily` (ряд на 18:00) и агрегатов.
 
 ## Telegram (`internal/tgbot`)
+- Приём сообщений — длинный опрос `getUpdates` в worker (работает без публичного адреса, в том числе локально); `TG_BOT_TOKEN` и `TG_CHAT_ID` в env. Вебхук `/api/v1/tg/webhook` — позже, для сервера.
+- В обычной группе нумерация сообщений своя у каждого аккаунта, поэтому сообщения бота и экспорта хранятся раздельно (`tg_messages.source` = bot | export) и сверяются по (автор, время, текст).
+- Автор → сотрудник: Telegram ID → @username → ФИО в первых строках (порядок слов и казахские буквы не важны) → имя аккаунта, если однозначно. Найденный по ФИО Telegram ID запоминается в `tg_aliases`. На корпусе: 99,5 % верно, 0 ошибок.
+- Для отчёта «Спринты»: больничные (подряд идущие дни, разрыв только на выходные) и «отпросился» (за день ≥ 2 ч или весь день) — без причин, их видят только admin/hr.
 - Бот добавлен в группу админом, privacy mode **off** (BotFather → /setprivacy → Disable), иначе бот не видит обычные сообщения.
 - Webhook `POST /api/v1/tg/webhook` с заголовком `X-Telegram-Bot-Api-Secret-Token` = `TG_WEBHOOK_SECRET`.
 - Обрабатываем `message`, `edited_message`. Сохраняем raw → `tgparse.Parse` → `attendance_events`.

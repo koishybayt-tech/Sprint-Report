@@ -4,3 +4,6 @@ web/node_modules
 web/.output
 web/.nuxt
 /reports
+/import
+*.result.json
+result.json

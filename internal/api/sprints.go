@@ -42,17 +42,29 @@ func loadReport(r *http.Request, pool *pgxpool.Pool) (*metrics.SprintReport, err
 	}
 	rep := metrics.BuildSprintReport(issues, leads, tl, futures, si, *last)
 
-	// Отсутствия, не закончившиеся к дате среза (Bitrix, позже Telegram).
-	day := last.In(metrics.Almaty)
-	abs, err := db.Absences(ctx, pool, time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC))
+	// Отсутствия, не закончившиеся к дате среза: отпуска Bitrix, затем больничные и «отпросился» из Telegram
+	// (порядок важен — Telegram, пересекающийся с отпуском, не дублируется).
+	local := last.In(metrics.Almaty)
+	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+	abs, err := db.Absences(ctx, pool, day)
 	if err != nil {
 		return nil, err
 	}
+	tg, err := db.TelegramEvents(ctx, pool, day.AddDate(0, 0, -31)) // с запасом, чтобы видеть начало длинного больничного
+	if err != nil {
+		return nil, err
+	}
+	abs = append(abs, metrics.TelegramAbsences(tg, day)...)
 	syncs, err := db.LastSyncs(ctx, pool)
 	if err != nil {
 		return nil, err
 	}
 	delete(syncs, "jira")
+	if t, err := db.LastTelegramMessage(ctx, pool); err != nil {
+		return nil, err
+	} else if t != nil {
+		syncs["telegram"] = *t
+	}
 	metrics.AttachAbsences(&rep, abs, syncs)
 	return &rep, nil
 }

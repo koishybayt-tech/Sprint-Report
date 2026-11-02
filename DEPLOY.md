@@ -55,8 +55,8 @@ C="docker compose -f deploy/docker-compose.yml"
 $C cp seed api:/tmp/seed && $C exec api /app/reports seed --dir /tmp/seed      # сотрудники, алиасы TG, праздники
 $C exec api /app/reports sync jira --full                                      # 5–15 минут
 $C exec api /app/reports sync bitrix
-$C cp ~/result.json api:/tmp/result.json && $C exec api /app/reports import-telegram --file /tmp/result.json
-$C exec api /app/reports tg set-webhook                                        # https://$DOMAIN/api/v1/tg/webhook
+$C cp ~/result.json api:/tmp/result.json && $C exec api /app/reports import-telegram --file /tmp/result.json   # история; повторный импорт безопасен
+# бот: worker сам принимает сообщения (getUpdates), если в .env заданы TG_BOT_TOKEN и TG_CHAT_ID
 ```
 
 ## 6. Проверка

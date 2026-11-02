@@ -157,3 +157,26 @@ func LastSyncs(ctx context.Context, pool *pgxpool.Pool) (map[string]time.Time, e
 	}
 	return m, rows.Err()
 }
+
+// TelegramEvents — события Telegram для отсутствий в отчёте: больничные и опоздания/уходы/отлучки с даты from.
+func TelegramEvents(ctx context.Context, pool *pgxpool.Pool, from time.Time) ([]metrics.TgEvent, error) {
+	rows, err := pool.Query(ctx, `SELECT coalesce(e.jira_login, ''), e.full_name, a.day, a.kind, a.from_min, a.to_min, a.minutes
+		FROM attendance_events a JOIN employees e ON e.id = a.employee_id
+		WHERE a.source = 'telegram' AND NOT a.superseded AND a.kind IN ('sick','late','early','mid','day') AND a.day >= $1
+		ORDER BY e.full_name, a.day`, from)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (metrics.TgEvent, error) {
+		var e metrics.TgEvent
+		err := r.Scan(&e.Login, &e.FullName, &e.Day, &e.Kind, &e.FromMin, &e.ToMin, &e.Minutes)
+		return e, err
+	})
+}
+
+// LastTelegramMessage — время последнего сообщения группы (ABSAT.tg в старом отчёте).
+func LastTelegramMessage(ctx context.Context, pool *pgxpool.Pool) (*time.Time, error) {
+	var t *time.Time
+	err := pool.QueryRow(ctx, `SELECT max(sent_at) FROM tg_messages`).Scan(&t)
+	return t, err
+}

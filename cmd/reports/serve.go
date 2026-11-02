@@ -14,6 +14,7 @@ import (
 	"github.com/adata/reports/internal/config"
 	"github.com/adata/reports/internal/db"
 	"github.com/adata/reports/internal/jira"
+	"github.com/adata/reports/internal/tgbot"
 )
 
 func runServe(ctx context.Context, log *slog.Logger) error {
@@ -51,7 +52,8 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 }
 
 // runWorker синхронизирует Jira (каждые JIRA_SYNC_EVERY, 15m) и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 2h),
-// оба раза — сразу при старте. Без JIRA_PAT / BITRIX_API_KEY соответствующая синхронизация выключена.
+// оба раза — сразу при старте, и принимает сообщения группы ботом Telegram.
+// Без JIRA_PAT / BITRIX_API_KEY / TG_BOT_TOKEN+TG_CHAT_ID соответствующая часть выключена.
 func runWorker(ctx context.Context, log *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -70,6 +72,17 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 	bx, err := bitrix.New(cfg.BitrixVacationURL, cfg.BitrixAPIKey)
 	if err != nil {
 		log.Warn("worker: синхронизация Bitrix выключена", "reason", err.Error())
+	}
+	if cfg.TgBotToken != "" && cfg.TgChatID != 0 {
+		if store, err := tgbot.NewStore(ctx, pool); err != nil {
+			log.Error("worker: бот Telegram выключен — справочник авторов", "err", err)
+		} else if bot, err := tgbot.NewBot(cfg.TgBotToken, cfg.TgChatID, store, log); err != nil {
+			log.Warn("worker: бот Telegram выключен", "reason", err.Error())
+		} else {
+			go bot.Run(ctx)
+		}
+	} else {
+		log.Warn("worker: бот Telegram выключен", "reason", "нет TG_BOT_TOKEN или TG_CHAT_ID")
 	}
 	log.Info("worker: запущен", "jira_sync_every", cfg.JiraSyncEvery.String(), "bitrix_sync_every", cfg.BitrixSyncEvery.String())
 	runJira := func() {
