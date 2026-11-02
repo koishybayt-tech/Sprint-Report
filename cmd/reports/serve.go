@@ -30,7 +30,7 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.NewRouter(pool, log),
+		Handler:           api.NewRouter(pool, log, cfg),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
@@ -126,6 +126,8 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 	}
 	runJira()
 	runBitrix()
+	// Личные Telegram-боты руководителей: привязка по /start <код> и кнопка «Игнорировать».
+	go notifier(cfg, pool, log).RunBots(ctx, 10*time.Second)
 	// История задач за год (карточка сотрудника) — отдельно: первая загрузка идёт ~20 минут и не должна держать остальное.
 	if client != nil {
 		go func() {

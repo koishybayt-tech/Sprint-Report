@@ -9,8 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/adata/reports/internal/metrics"
 )
 
 // JiraNames — логин → отображаемое имя Jira (исполнители, авторы задач, справочник сотрудников).
@@ -34,127 +32,6 @@ func JiraNames(ctx context.Context, pool *pgxpool.Pool) (map[string]string, erro
 		if l != nil && n != nil && *l != "" {
 			m[*l] = *n // позже — имена из Jira, они главнее справочника
 		}
-	}
-	return m, rows.Err()
-}
-
-// SnapIssues — задачи года (как для карточки сотрудника) для снепшота; логины в истории заменены именами Jira.
-func SnapIssues(ctx context.Context, pool *pgxpool.Pool, names map[string]string) ([]metrics.SnapIssue, error) {
-	sprints := map[int64]metrics.SnapSprint{}
-	srows, err := pool.Query(ctx, `SELECT id, name, state,
-			coalesce(to_char(start_date AT TIME ZONE 'Asia/Almaty', 'YYYY-MM-DD'), ''),
-			coalesce(to_char(end_date AT TIME ZONE 'Asia/Almaty', 'YYYY-MM-DD'), '') FROM jira_sprints`)
-	if err != nil {
-		return nil, err
-	}
-	for srows.Next() {
-		var id int64
-		var s metrics.SnapSprint
-		if err := srows.Scan(&id, &s.Name, &s.State, &s.Start, &s.End); err != nil {
-			srows.Close()
-			return nil, err
-		}
-		sprints[id] = s
-	}
-	srows.Close()
-	if err := srows.Err(); err != nil {
-		return nil, err
-	}
-
-	const yearStart = `date_trunc('year', now() AT TIME ZONE 'Asia/Almaty') AT TIME ZONE 'Asia/Almaty'`
-	rows, err := pool.Query(ctx, `SELECT key, coalesce(type, ''), coalesce(status_name, ''), coalesce(status_id, ''),
-			coalesce(raw->'fields'->'status'->'statusCategory'->>'key', '') = 'done',
-			coalesce(assignee, ''), coalesce(reporter, ''), created, resolved, sprint_ids
-		FROM jira_issues WHERE updated >= `+yearStart+` OR in_open_sprints OR in_future_sprints`)
-	if err != nil {
-		return nil, err
-	}
-	var out []metrics.SnapIssue
-	idx := map[string]int{}
-	for rows.Next() {
-		var is metrics.SnapIssue
-		var ids []int64
-		if err := rows.Scan(&is.Key, &is.Type, &is.Status, &is.StatusID, &is.Done, &is.Assignee, &is.Reporter,
-			&is.Created, &is.Resolved, &ids); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		for _, id := range ids {
-			if s, ok := sprints[id]; ok {
-				is.Sprints = append(is.Sprints, s)
-			}
-		}
-		idx[is.Key] = len(out)
-		out = append(out, is)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	name := func(l string) string {
-		if n, ok := names[l]; ok {
-			return n
-		}
-		return l
-	}
-	crows, err := pool.Query(ctx, `SELECT issue_key, at, field, coalesce(from_val, ''), coalesce(to_val, ''), coalesce(author, '')
-		FROM jira_changelog ORDER BY at`)
-	if err != nil {
-		return nil, err
-	}
-	defer crows.Close()
-	for crows.Next() {
-		var key string
-		var c metrics.SnapChange
-		if err := crows.Scan(&key, &c.At, &c.Field, &c.From, &c.To, &c.Author); err != nil {
-			return nil, err
-		}
-		i, ok := idx[key]
-		if !ok {
-			continue
-		}
-		c.Author = name(c.Author)
-		if c.Field == "assignee" {
-			c.From, c.To = name(c.From), name(c.To)
-		}
-		out[i].Changes = append(out[i].Changes, c)
-	}
-	return out, crows.Err()
-}
-
-// DaysOff — нерабочие дни (праздники и переносы выходных); рабочие субботы-переносы сюда не входят.
-func DaysOff(ctx context.Context, pool *pgxpool.Pool) (map[string]bool, error) {
-	rows, err := pool.Query(ctx, `SELECT to_char(day, 'YYYY-MM-DD') FROM holidays WHERE kind <> 'transfer_work'`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	m := map[string]bool{}
-	for rows.Next() {
-		var d string
-		if err := rows.Scan(&d); err != nil {
-			return nil, err
-		}
-		m[d] = true
-	}
-	return m, rows.Err()
-}
-
-// StaffPositions — сотрудники в штате (не уволены) с логином Jira и должностью из справочника.
-func StaffPositions(ctx context.Context, pool *pgxpool.Pool) (map[string]string, error) {
-	rows, err := pool.Query(ctx, `SELECT jira_login, coalesce(position, '') FROM employees
-		WHERE staff AND left_at IS NULL AND jira_login IS NOT NULL`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	m := map[string]string{}
-	for rows.Next() {
-		var l, p string
-		if err := rows.Scan(&l, &p); err != nil {
-			return nil, err
-		}
-		m[l] = p
 	}
 	return m, rows.Err()
 }
@@ -200,6 +77,15 @@ func ListSnapshots(ctx context.Context, pool *pgxpool.Pool) ([]SnapshotInfo, err
 		out = []SnapshotInfo{}
 	}
 	return out, err
+}
+
+// DeleteSnapshot удаляет снепшот на дату (ErrNotFound — такого нет).
+func DeleteSnapshot(ctx context.Context, pool *pgxpool.Pool, takenFor string) error {
+	tag, err := pool.Exec(ctx, `DELETE FROM snapshots WHERE taken_for = $1`, takenFor)
+	if err == nil && tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return err
 }
 
 // GetSnapshot — сохранённый payload как есть (nil — нет такого).

@@ -16,7 +16,7 @@ import (
 
 // Поля задачи, которые забираем (как FIELDS в reference/sprints/inc.js + дата решения, эпик, автор).
 const IssueFields = "summary,status,assignee,reporter,issuetype,project,priority,created,updated,resolutiondate,timespent," +
-	"customfield_10104,customfield_11204,customfield_10902,customfield_11101,customfield_10100"
+	"customfield_10104,customfield_11204,customfield_10902,customfield_11101,customfield_10100,issuelinks"
 
 type Client struct {
 	base string
@@ -107,6 +107,34 @@ func (c *Client) SearchEach(ctx context.Context, jql, fields, expand string, fn 
 			return nil
 		}
 	}
+}
+
+// SearchChanges — задачи вместе с историей статуса и исполнителя; обрезанная в поиске история догружается по задаче.
+func (c *Client) SearchChanges(ctx context.Context, jql, fields string) ([]Issue, error) {
+	var all []Issue
+	err := c.SearchEach(ctx, jql, fields, "changelog", func(page []Issue) error {
+		if err := c.completeChanges(ctx, page); err != nil {
+			return err
+		}
+		all = append(all, page...)
+		return nil
+	})
+	return all, err
+}
+
+// completeChanges догружает историю задач, у которых поиск отдал её не полностью; возвращает их число.
+func (c *Client) completeChanges(ctx context.Context, page []Issue) error {
+	for i := range page {
+		if !page[i].ChangesPartial {
+			continue
+		}
+		ch, err := c.IssueChanges(ctx, page[i].Key)
+		if err != nil {
+			return err
+		}
+		page[i].Changes, page[i].ChangesPartial = ch, false
+	}
+	return nil
 }
 
 // IssueChanges — полная история задачи, когда поиск отдал её обрезанной.

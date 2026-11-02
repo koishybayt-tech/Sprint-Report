@@ -7,7 +7,47 @@ import { defaultCtl, peopleLogic, switchTip } from '~/utils/sprintsPeople'
 const { apiBase, jiraBase } = useRuntimeConfig().public
 const route = useRoute()
 const router = useRouter()
-const { data, error, pending } = await useFetch<ApiReport>(`${apiBase}/sprints/report`)
+// Источник — живой отчёт или сохранённый снепшот (?snap=ГГГГ-ММ-ДД): снепшот — замороженная копия того же ответа.
+type SnapInfo = { taken_for: string; history_end: string; note: string; created_by: string; created_at: string }
+const snap = computed(() => typeof route.query.snap === 'string' ? route.query.snap : '')
+const { data: snaps, refresh: refreshSnaps } = await useFetch<SnapInfo[]>(`${apiBase}/snapshots`)
+const { data: raw, error, pending, refresh } = await useFetch<any>(
+  () => snap.value ? `${apiBase}/snapshots/${snap.value}` : `${apiBase}/sprints/report`, { watch: [snap] })
+const data = computed<ApiReport | null>(() => (snap.value ? raw.value?.snapshot : raw.value) ?? null)
+const snapInfo = computed<SnapInfo | null>(() => snap.value ? raw.value?.info ?? null : null)
+
+// ---------- снепшоты: сохранить (на сегодня), открыть, удалить — admin и lead ----------
+const { me } = useMe()
+const canSnap = computed(() => canSeeSnapshots(me.value))
+const snapNote = ref('')
+const snapBusy = ref(false)
+const snapMsg = ref('')
+const dmy = (d: string) => d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(0, 4)
+function openSnap(d: string) { router.replace({ query: { ...route.query, snap: d || undefined } }) }
+async function saveSnap() {
+  snapBusy.value = true; snapMsg.value = ''
+  try {
+    const r = await $fetch<{ date: string }>(`${apiBase}/snapshots`, { method: 'POST', body: { note: snapNote.value.trim() } })
+    snapNote.value = ''
+    await refreshSnaps()
+    snapMsg.value = `Снепшот на ${dmy(r.date)} сохранён`
+  } catch (e: any) {
+    snapMsg.value = e?.data?.error || (e?.statusCode ? `Ошибка ${e.statusCode}` : 'Сервис недоступен')
+  } finally { snapBusy.value = false }
+}
+async function deleteSnap() {
+  const d = snap.value
+  if (!d || !confirm(`Удалить снепшот на ${dmy(d)}? Восстановить его будет нельзя.`)) return
+  snapBusy.value = true; snapMsg.value = ''
+  try {
+    await $fetch(`${apiBase}/snapshots/${d}`, { method: 'DELETE' })
+    await refreshSnaps()
+    openSnap('')
+    snapMsg.value = `Снепшот на ${dmy(d)} удалён`
+  } catch (e: any) {
+    snapMsg.value = e?.data?.error || (e?.statusCode ? `Ошибка ${e.statusCode}` : 'Сервис недоступен')
+  } finally { snapBusy.value = false }
+}
 
 const m = computed(() => data.value?.updated_at ? buildModel(data.value) : null)
 
@@ -254,6 +294,26 @@ const notes = computed(() => {
         <h1>Спринты Adata</h1>
         <span class="meta">{{ updated ? `Данные Jira на ${updated}` : '' }}</span>
       </header>
+      <div class="gbar snapbar">
+        <label class="gf"><span>Снепшот</span>
+          <select :value="snap" aria-label="Снепшот" @change="openSnap(($event.target as HTMLSelectElement).value)">
+            <option value="">Сейчас (живые данные)</option>
+            <option v-for="s in snaps || []" :key="s.taken_for" :value="s.taken_for">{{ dmy(s.taken_for) }}{{ s.note ? ' — ' + s.note : '' }}</option>
+          </select>
+        </label>
+        <template v-if="canSnap">
+          <template v-if="!snap">
+            <input v-model="snapNote" type="search" maxlength="200" placeholder="Комментарий к снепшоту" aria-label="Комментарий к снепшоту">
+            <button type="button" class="btn primary" :disabled="snapBusy || !data?.updated_at" @click="saveSnap">{{ snapBusy ? 'Сохраняю…' : 'Сохранить снепшот' }}</button>
+          </template>
+          <button v-else type="button" class="btn danger" :disabled="snapBusy" @click="deleteSnap">Удалить снепшот</button>
+        </template>
+        <button v-if="!snap" type="button" class="btn" :disabled="pending" @click="refresh()">Обновить</button>
+        <span v-if="snapMsg" class="sub" role="status">{{ snapMsg }}</span>
+      </div>
+      <p v-if="snapInfo" class="snap-banner">Снепшот на {{ dmy(snapInfo.taken_for) }} — замороженная копия отчёта{{ updated ? `, данные Jira на ${updated}` : '' }}.
+        Сохранил {{ snapInfo.created_by || 'администратор' }}{{ snapInfo.note ? ' · ' + snapInfo.note : '' }}.
+        <button type="button" class="linkbtn" @click="openSnap('')">Вернуться к живым данным</button></p>
       <div class="gbar">
         <label class="gf"><span>Руководитель проекта</span>
           <select v-model="lead">
@@ -270,6 +330,10 @@ const notes = computed(() => {
 
     <p v-if="pending" class="sub">Загружаю…</p>
     <div v-else-if="error" class="notice">Не удалось получить данные: {{ error.statusCode ? `HTTP ${error.statusCode}` : error.message }}</div>
+    <div v-else-if="snap && !m" class="notice">
+      Этот снепшот сохранён в старом формате (до того, как снепшоты стали копией «Спринтов»), отчёта в нём нет.
+      Удалите его и сохраните заново — новый снепшот повторит все вкладки.
+    </div>
     <div v-else-if="!m" class="notice">
       Данных Jira ещё нет. Запустите синхронизацию: <code>reports sync jira --full</code> (worker делает это сам, если задан JIRA_PAT).
     </div>

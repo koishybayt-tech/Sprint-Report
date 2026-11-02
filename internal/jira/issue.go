@@ -50,7 +50,30 @@ type Issue struct {
 	Sprints     []Sprint // в порядке, в котором их отдаёт Jira
 	// История статуса и исполнителя — только если задача запрошена с expand=changelog (синк истории).
 	Changes        []Change
-	ChangesPartial bool // Jira отдала не всю историю — догрузить отдельно
+	ChangesPartial bool   // Jira отдала не всю историю — догрузить отдельно
+	Links          []Link // связи задачи (issuelinks)
+}
+
+// Link — связь задачи: тип (Relate, Blocks, …), направление относительно этой задачи и связанная задача.
+type Link struct {
+	Type      string // имя типа связи в Jira
+	Direction string // outward — «эта задача <outward> связанной», inward — наоборот
+	Phrase    string // как связь читается от этой задачи: «relates to», «is blocked by», …
+	Key       string
+}
+
+type rawLink struct {
+	Type struct {
+		Name    string `json:"name"`
+		Inward  string `json:"inward"`
+		Outward string `json:"outward"`
+	} `json:"type"`
+	InwardIssue *struct {
+		Key string `json:"key"`
+	} `json:"inwardIssue"`
+	OutwardIssue *struct {
+		Key string `json:"key"`
+	} `json:"outwardIssue"`
 }
 
 // Change — переход из истории задачи. Статус — названия (как в reference/employee/build_emp.py),
@@ -142,6 +165,7 @@ type rawIssue struct {
 		Tester         *User             `json:"customfield_10902"`
 		Position       json.RawMessage   `json:"customfield_11101"`
 		Epic           *string           `json:"customfield_10100"`
+		Links          []rawLink         `json:"issuelinks"`
 	} `json:"fields"`
 }
 
@@ -197,6 +221,14 @@ func parseIssue(raw json.RawMessage) (Issue, error) {
 			return is, fmt.Errorf("%s resolutiondate: %w", r.Key, err)
 		}
 		is.Resolved = &t
+	}
+	for _, l := range f.Links {
+		switch {
+		case l.OutwardIssue != nil:
+			is.Links = append(is.Links, Link{Type: l.Type.Name, Direction: "outward", Phrase: l.Type.Outward, Key: l.OutwardIssue.Key})
+		case l.InwardIssue != nil:
+			is.Links = append(is.Links, Link{Type: l.Type.Name, Direction: "inward", Phrase: l.Type.Inward, Key: l.InwardIssue.Key})
+		}
 	}
 	if r.Changelog != nil {
 		ch, err := parseChanges(r.Changelog)

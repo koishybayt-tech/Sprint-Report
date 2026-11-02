@@ -14,6 +14,7 @@ import (
 	"github.com/adata/reports/internal/db"
 	"github.com/adata/reports/internal/jira"
 	"github.com/adata/reports/internal/metrics"
+	"github.com/adata/reports/internal/notify"
 )
 
 // runSync: reports sync jira [--full] | reports sync jira-history [--full] | reports sync bitrix.
@@ -78,9 +79,34 @@ func syncJiraHistory(ctx context.Context, log *slog.Logger, client *jira.Client,
 	return nil
 }
 
-// syncJira — один проход синхронизации Jira: полный (full) или инкрементальный; общий для команды sync и worker.
-// Инкрементальный без прошлых запусков сам становится полным.
+// syncJira — один проход синхронизации Jira и пересчёт «Контроля спринта руководителей» после него.
 func syncJira(ctx context.Context, log *slog.Logger, cfg config.Config, client *jira.Client, pool *pgxpool.Pool, full bool) error {
+	if err := syncJiraOnce(ctx, log, cfg, client, pool, full); err != nil {
+		return err
+	}
+	t0 := time.Now()
+	reps, err := db.RefreshLeadControl(ctx, pool, time.Now(), cfg.JiraBaseURL)
+	if err != nil {
+		return fmt.Errorf("пересчёт контроля спринта руководителей: %w", err)
+	}
+	log.Info("lead control: пересчитан", "leads", len(reps), "took", time.Since(t0).Round(time.Millisecond).String())
+	// Новые события (в блоке, можно снимать блок, без продолжения) → колокольчик и личные боты руководителей.
+	if err := notifier(cfg, pool, log).Process(ctx, reps); err != nil {
+		return fmt.Errorf("уведомления: %w", err)
+	}
+	return nil
+}
+
+// notifier — сервис уведомлений; «Игнорировать» из бота сразу пересчитывает отчёт руководителя.
+func notifier(cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) *notify.Service {
+	s := notify.New(pool, cfg.SecretsKey, cfg.JiraBaseURL, log)
+	s.Rebuild = func(ctx context.Context, lead string) error { return db.RebuildLead(ctx, pool, lead, cfg.JiraBaseURL) }
+	return s
+}
+
+// syncJiraOnce — полный (full) или инкрементальный проход; общий для команды sync и worker.
+// Инкрементальный без прошлых запусков сам становится полным.
+func syncJiraOnce(ctx context.Context, log *slog.Logger, cfg config.Config, client *jira.Client, pool *pgxpool.Pool, full bool) error {
 	me, err := client.Myself(ctx)
 	if err != nil {
 		return fmt.Errorf("проверка токена Jira: %w", err)

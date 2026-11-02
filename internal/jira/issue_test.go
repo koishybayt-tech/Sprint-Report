@@ -58,3 +58,17 @@ func TestParseIssueChangelog(t *testing.T) {
 		t.Errorf("история осталась в raw")
 	}
 }
+
+func TestParseIssueLinks(t *testing.T) {
+	raw := []byte(`{"key":"EDO-1557","fields":{"summary":"Фронт. Открыть","status":{"id":"10900","name":"Blocked"},"project":{"key":"EDO"},
+		"issuelinks":[{"type":{"name":"Relate","inward":"relates to","outward":"relates"},"outwardIssue":{"key":"EDO-1558"}},
+			{"type":{"name":"Blocks","inward":"is blocked by","outward":"blocks"},"inwardIssue":{"key":"EDO-1550"}}]}}`)
+	is, err := parseIssue(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Link{{"Relate", "outward", "relates", "EDO-1558"}, {"Blocks", "inward", "is blocked by", "EDO-1550"}}
+	if len(is.Links) != 2 || is.Links[0] != want[0] || is.Links[1] != want[1] {
+		t.Fatalf("links: %+v", is.Links)
+	}
+}

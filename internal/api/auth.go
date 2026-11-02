@@ -201,20 +201,22 @@ func (h *authHandlers) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		FullName *string `json:"full_name"`
-		Role     *string `json:"role"`
-		Active   *bool   `json:"active"`
+		Login         *string `json:"login"`
+		FullName      *string `json:"full_name"`
+		Role          *string `json:"role"`
+		Active        *bool   `json:"active"`
+		EmployeeLogin *string `json:"employee_login"` // "" — отвязать от сотрудника
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	u, err := h.users.Update(r.Context(), id, req.FullName, req.Role, req.Active)
+	u, err := h.users.Update(r.Context(), id, auth.UserPatch{Login: req.Login, FullName: req.FullName, Role: req.Role, Active: req.Active, EmployeeLogin: req.EmployeeLogin})
 	if err != nil {
 		h.userErr(w, "admin/users update", err)
 		return
 	}
 	actor, _ := auth.FromContext(r.Context())
-	h.log.Info("auth: пользователь изменён", "login", u.Login, "role", u.Role, "active", u.Active, "by", actor.Login)
+	h.log.Info("auth: пользователь изменён", "login", u.Login, "role", u.Role, "active", u.Active, "employee", u.EmployeeLogin, "by", actor.Login)
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -255,7 +257,7 @@ func (h *authHandlers) userErr(w http.ResponseWriter, what string, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 	case errors.Is(err, auth.ErrLoginTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-	case errors.Is(err, auth.ErrWeakPassword), strings.HasPrefix(err.Error(), "укажите"), strings.HasPrefix(err.Error(), "неизвестная роль"),
+	case errors.Is(err, auth.ErrWeakPassword), errors.Is(err, auth.ErrNoEmployee), strings.HasPrefix(err.Error(), "укажите"), strings.HasPrefix(err.Error(), "неизвестная роль"),
 		strings.HasPrefix(err.Error(), "должен остаться"):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	default:

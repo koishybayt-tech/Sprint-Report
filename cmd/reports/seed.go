@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -48,6 +49,7 @@ func runSeed(ctx context.Context, log *slog.Logger, args []string) error {
 		{"tg_aliases.csv", seedAliases},
 		{"holidays_kz.csv", seedHolidays},
 		{"management.csv", seedManagement},
+		{"lead_projects.csv", seedLeadProjects},
 	}
 	for _, s := range steps {
 		rows, err := readCSV(filepath.Join(*dir, s.file))
@@ -200,4 +202,20 @@ func seedManagement(ctx context.Context, tx pgx.Tx, rows []map[string]string) (i
 		return 0, 0, err
 	}
 	return n, len(names) - n, nil
+}
+
+// lead_projects.csv: lead, project_key, title, position — руководитель → проекты («Контроль спринта руководителей»).
+// Только добавляет недостающие пары: правки и удаления из «Настроек» сид не перетирает.
+func seedLeadProjects(ctx context.Context, tx pgx.Tx, rows []map[string]string) (int, int, error) {
+	written := 0
+	for _, r := range rows {
+		pos, _ := strconv.Atoi(r["position"])
+		tag, err := tx.Exec(ctx, `INSERT INTO lead_projects (lead, project_key, title, position) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (lead, project_key) DO NOTHING`, strings.TrimSpace(r["lead"]), strings.TrimSpace(r["project_key"]), strings.TrimSpace(r["title"]), pos)
+		if err != nil {
+			return written, 0, err
+		}
+		written += int(tag.RowsAffected())
+	}
+	return written, len(rows) - written, nil
 }

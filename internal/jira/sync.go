@@ -63,7 +63,8 @@ func FullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 
 func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logger, st *SyncStats) error {
 	t0 := time.Now()
-	issues, err := c.Search(ctx, OpenSprintsJQL+" ORDER BY created ASC", IssueFields)
+	// Задачи открытых спринтов — с историей статуса и исполнителя (нужна «Контролю спринта руководителей»).
+	issues, err := c.SearchChanges(ctx, OpenSprintsJQL+" ORDER BY created ASC", IssueFields)
 	if err != nil {
 		return err
 	}
@@ -134,6 +135,9 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 	if err := upsertIssues(ctx, tx, futureIssues, "in_future_sprints"); err != nil {
 		return err
 	}
+	if err := writeChanges(ctx, tx, issues); err != nil {
+		return err
+	}
 	st.Issues, st.FutureIssues = len(issues), len(futureIssues)
 
 	if err := writeFutures(ctx, tx, futures); err != nil {
@@ -193,6 +197,24 @@ func upsertIssues(ctx context.Context, tx pgx.Tx, issues []Issue, flag string) e
 	}
 	if err := tx.SendBatch(ctx, batch).Close(); err != nil {
 		return fmt.Errorf("запись задач (%s): %w", flag, err)
+	}
+	return writeLinks(ctx, tx, issues)
+}
+
+// writeLinks заменяет связи задач (issuelinks).
+func writeLinks(ctx context.Context, tx pgx.Tx, issues []Issue) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM jira_issue_links WHERE issue_key = ANY($1)`, keysOf(issues)); err != nil {
+		return err
+	}
+	b := &pgx.Batch{}
+	for _, is := range issues {
+		for _, l := range is.Links {
+			b.Queue(`INSERT INTO jira_issue_links (issue_key, link_type, direction, phrase, linked_key) VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT DO NOTHING`, is.Key, l.Type, l.Direction, l.Phrase, l.Key)
+		}
+	}
+	if err := tx.SendBatch(ctx, b).Close(); err != nil {
+		return fmt.Errorf("запись связей задач: %w", err)
 	}
 	return nil
 }

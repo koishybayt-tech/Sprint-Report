@@ -61,15 +61,12 @@ func HistorySync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.L
 	}
 	err := c.SearchEach(ctx, jql, IssueFields, "changelog", func(page []Issue) error {
 		for i := range page {
-			if !page[i].ChangesPartial {
-				continue
+			if page[i].ChangesPartial {
+				st.Refetch++
 			}
-			ch, err := c.IssueChanges(ctx, page[i].Key)
-			if err != nil {
-				return err
-			}
-			page[i].Changes = ch
-			st.Refetch++
+		}
+		if err := c.completeChanges(ctx, page); err != nil {
+			return err
 		}
 		if err := writeHistory(ctx, pool, page); err != nil {
 			return err
@@ -110,6 +107,14 @@ func writeHistory(ctx context.Context, pool *pgxpool.Pool, issues []Issue) error
 	if err := upsertIssues(ctx, tx, issues, ""); err != nil {
 		return err
 	}
+	if err := writeChanges(ctx, tx, issues); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// writeChanges заменяет историю статуса и исполнителя у задач (задачи должны быть уже записаны).
+func writeChanges(ctx context.Context, tx pgx.Tx, issues []Issue) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM jira_changelog WHERE issue_key = ANY($1)`, keysOf(issues)); err != nil {
 		return err
 	}
@@ -123,5 +128,5 @@ func writeHistory(ctx context.Context, pool *pgxpool.Pool, issues []Issue) error
 	if err := tx.SendBatch(ctx, b).Close(); err != nil {
 		return fmt.Errorf("запись истории задач: %w", err)
 	}
-	return tx.Commit(ctx)
+	return nil
 }

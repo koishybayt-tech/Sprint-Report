@@ -30,6 +30,10 @@ type Config struct {
 
 	TgBotToken string // TG_BOT_TOKEN — секрет, не логировать
 	TgChatID   int64  // TG_CHAT_ID — группа «Adata Group» (отрицательное число)
+
+	// SECRETS_KEY — ключ шифрования секретов пользователей (токены личных Telegram-ботов руководителей), 16+ символов.
+	// Не задан — уведомления только в колокольчике сервиса.
+	SecretsKey string
 }
 
 func Load() (Config, error) {
@@ -41,6 +45,7 @@ func Load() (Config, error) {
 		BitrixVacationURL: getenv("BITRIX_VACATION_URL", "https://bitrix.avh.kz/api/v1/vacation_api.php"),
 		BitrixAPIKey:      strings.TrimSpace(os.Getenv("BITRIX_API_KEY")),
 		TgBotToken:        strings.TrimSpace(os.Getenv("TG_BOT_TOKEN")),
+		SecretsKey:        strings.TrimSpace(os.Getenv("SECRETS_KEY")),
 	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("DATABASE_URL не задан")

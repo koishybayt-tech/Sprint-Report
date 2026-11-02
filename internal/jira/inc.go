@@ -82,7 +82,7 @@ func incSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logge
 	// 2. Изменённые за окно. Относительное время в JQL не зависит от часового пояса профиля в Jira.
 	mins := int(math.Ceil(time.Since(lastStart.Add(-incOverlap)).Minutes()))
 	st.Since = fmt.Sprintf("updated >= -%dm", mins)
-	changed, err := c.Search(ctx, fmt.Sprintf("(%s OR %s) AND %s", OpenSprintsJQL, FutureSprintsJQL, st.Since), IssueFields)
+	changed, err := c.SearchChanges(ctx, fmt.Sprintf("(%s OR %s) AND %s ORDER BY key ASC", OpenSprintsJQL, FutureSprintsJQL, st.Since), IssueFields)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func incSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logge
 	rows.Close()
 	for i := 0; i < len(missing); i += 100 {
 		part := missing[i:min(i+100, len(missing))]
-		extra, err := c.Search(ctx, "key in ("+strings.Join(part, ",")+")", IssueFields)
+		extra, err := c.SearchChanges(ctx, "key in ("+strings.Join(part, ",")+") ORDER BY key ASC", IssueFields)
 		if err != nil {
 			return err
 		}
@@ -140,6 +140,9 @@ func incSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logge
 		return err
 	}
 	if err := upsertIssues(ctx, tx, changed, ""); err != nil {
+		return err
+	}
+	if err := writeChanges(ctx, tx, changed); err != nil {
 		return err
 	}
 	// Флаги — по текущему составу спринтов; ушедшие снимаются.

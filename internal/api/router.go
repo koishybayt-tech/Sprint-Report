@@ -12,11 +12,17 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/adata/reports/internal/api/lcapi"
 	"github.com/adata/reports/internal/auth"
+	"github.com/adata/reports/internal/config"
+	"github.com/adata/reports/internal/db"
+	"github.com/adata/reports/internal/notify"
 )
 
 // NewRouter. Без входа доступны только /healthz и /auth/*; остальное требует сессию, а права — по роли (docs/security.md).
-func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
+func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Handler {
+	nt := notify.New(pool, cfg.SecretsKey, cfg.JiraBaseURL, log)
+	nt.Rebuild = func(ctx context.Context, lead string) error { return db.RebuildLead(ctx, pool, lead, cfg.JiraBaseURL) }
 	ah := &authHandlers{users: auth.NewStore(pool), limiter: auth.NewLimiter(5, 10*time.Minute), log: log}
 
 	r := chi.NewRouter()
@@ -32,6 +38,9 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 			r.Post("/me/password", ah.changeOwnPassword)
 
 			r.Get("/attendance", attendance(pool, log)) // видимость — по роли внутри
+			// Колокольчик — свои уведомления у любого пользователя.
+			r.Get("/notifications", notifyList(nt, log))
+			r.Post("/notifications/read", notifyRead(nt, log))
 			empCache := &employeesCache{}
 			r.Get("/employees", employeesList(pool, log, empCache))
 			r.Get("/employees/{id}", employeeCard(pool, log, empCache))
@@ -44,13 +53,30 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 				r.Get("/sprints/report", sprintReport(pool, log))
 			})
 
-			// Снепшоты к созвонам: admin и lead (docs/security.md).
-			r.Route("/snapshots", func(r chi.Router) {
+			// Контроль спринта руководителей: admin и lead; хендлеры — по сгенерированному lcapi (api/openapi.yaml).
+			r.Group(func(r chi.Router) {
 				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead))
+				lcapi.HandlerFromMux(&leadControlServer{pool: pool, log: log, jiraBase: cfg.JiraBaseURL, notify: nt}, r)
+
+				// Уведомления руководителя: какие события присылать и личный Telegram-бот.
+				r.Get("/notifications/settings", notifySettings(nt, log))
+				r.Put("/notifications/settings", notifySaveSettings(nt, log))
+				r.Post("/notifications/telegram", notifyConnect(nt, log))
+				r.Delete("/notifications/telegram", notifyDisconnect(nt, log))
+				r.Post("/notifications/test", notifyTest(nt, log))
+			})
+
+			// Снепшоты — замороженные копии отчёта «Спринты»: смотрят все, кому видны «Спринты» (не hr);
+			// сохраняют и удаляют admin и lead.
+			r.Route("/snapshots", func(r chi.Router) {
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee))
 				r.Get("/", snapshotsList(pool, log))
-				r.Post("/", snapshotCreate(pool, log))
-				r.Get("/live", snapshotLive(pool, log))
 				r.Get("/{date}", snapshotGet(pool, log))
+				r.Group(func(r chi.Router) {
+					r.Use(requireRole(auth.RoleAdmin, auth.RoleLead))
+					r.Post("/", snapshotCreate(pool, log))
+					r.Delete("/{date}", snapshotDelete(pool, log))
+				})
 			})
 
 			// Очередь «Кто это?» (Telegram → сотрудник): admin и hr.
@@ -67,6 +93,14 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 				r.Post("/", ah.createUser)
 				r.Patch("/{id}", ah.updateUser)
 				r.Post("/{id}/password", ah.resetPassword)
+			})
+
+			// Справочник «руководитель → проекты» (Контроль спринта руководителей): только admin.
+			r.Route("/admin/lead-projects", func(r chi.Router) {
+				r.Use(requireRole(auth.RoleAdmin))
+				r.Get("/", leadProjectsList(pool, log))
+				r.Post("/", leadProjectsSave(pool, log))
+				r.Delete("/", leadProjectsDelete(pool, log))
 			})
 		})
 	})

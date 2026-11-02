@@ -45,14 +45,15 @@ func ValidRole(r string) bool {
 }
 
 type User struct {
-	ID          int64      `json:"id"`
-	Login       string     `json:"login"`
-	FullName    string     `json:"full_name"`
-	Role        string     `json:"role"`
-	EmployeeID  *int64     `json:"employee_id"`
-	Active      bool       `json:"active"`
-	CreatedAt   time.Time  `json:"created_at"`
-	LastLoginAt *time.Time `json:"last_login_at"`
+	ID            int64      `json:"id"`
+	Login         string     `json:"login"`
+	FullName      string     `json:"full_name"`
+	Role          string     `json:"role"`
+	EmployeeID    *int64     `json:"employee_id"`
+	EmployeeLogin *string    `json:"employee_login"` // логин Jira связанного сотрудника
+	Active        bool       `json:"active"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastLoginAt   *time.Time `json:"last_login_at"`
 }
 
 var (
@@ -93,11 +94,12 @@ var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password-for-timing
 
 // ---------- пользователи ----------
 
-const userCols = `id, login, full_name, role, employee_id, active, created_at, last_login_at`
+const userCols = `id, login, full_name, role, employee_id, active, created_at, last_login_at,
+	(SELECT jira_login FROM employees e WHERE e.id = employee_id)`
 
 func scanUser(r pgx.Row) (User, error) {
 	var u User
-	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt)
+	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -109,7 +111,7 @@ func (s *Store) Authenticate(ctx context.Context, login, password string) (User,
 	var hash string
 	var u User
 	err := s.pool.QueryRow(ctx, `SELECT `+userCols+`, password_hash FROM users WHERE lower(login) = lower($1) AND active`,
-		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &hash)
+		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return User{}, ErrBadCredentials
@@ -167,20 +169,56 @@ func (s *Store) Create(ctx context.Context, login, fullName, role, password, emp
 	return u, err
 }
 
-// Update меняет имя, роль и активность. Деактивация закрывает все сессии пользователя.
+// UserPatch — что меняется у пользователя; nil — не трогать. EmployeeLogin "" — отвязать от сотрудника.
+type UserPatch struct {
+	Login         *string
+	FullName      *string
+	Role          *string
+	Active        *bool
+	EmployeeLogin *string
+}
+
+var ErrNoEmployee = errors.New("сотрудника с таким логином Jira нет в справочнике")
+
+// Update меняет логин, имя, роль, активность и связь с сотрудником. Деактивация закрывает все сессии пользователя.
 // Нельзя оставить систему без активного администратора.
-func (s *Store) Update(ctx context.Context, id int64, fullName *string, role *string, active *bool) (User, error) {
-	if role != nil && !ValidRole(*role) {
-		return User{}, fmt.Errorf("неизвестная роль %q", *role)
+func (s *Store) Update(ctx context.Context, id int64, p UserPatch) (User, error) {
+	if p.Role != nil && !ValidRole(*p.Role) {
+		return User{}, fmt.Errorf("неизвестная роль %q", *p.Role)
+	}
+	if p.Login != nil {
+		if l := strings.TrimSpace(*p.Login); l == "" {
+			return User{}, errors.New("укажите логин")
+		}
+	}
+	if p.FullName != nil && strings.TrimSpace(*p.FullName) == "" {
+		return User{}, errors.New("укажите имя")
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, err
 	}
 	defer tx.Rollback(ctx)
-	u, err := scanUser(tx.QueryRow(ctx, `UPDATE users SET full_name = coalesce(nullif(trim($2), ''), full_name),
-		role = coalesce($3, role), active = coalesce($4, active), updated_at = now() WHERE id = $1 RETURNING `+userCols,
-		id, fullName, role, active))
+	if p.EmployeeLogin != nil && strings.TrimSpace(*p.EmployeeLogin) != "" {
+		var ok bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM employees WHERE jira_login = $1)`, strings.TrimSpace(*p.EmployeeLogin)).Scan(&ok); err != nil {
+			return User{}, err
+		}
+		if !ok {
+			return User{}, ErrNoEmployee
+		}
+	}
+	u, err := scanUser(tx.QueryRow(ctx, `UPDATE users SET login = coalesce(nullif(trim($2), ''), login),
+		full_name = coalesce(nullif(trim($3), ''), full_name), role = coalesce($4, role), active = coalesce($5, active),
+		employee_id = CASE WHEN $6::text IS NULL THEN employee_id ELSE (SELECT id FROM employees WHERE jira_login = nullif(trim($6), '')) END,
+		updated_at = now() WHERE id = $1 RETURNING `+userCols,
+		id, p.Login, p.FullName, p.Role, p.Active, p.EmployeeLogin))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil && strings.Contains(err.Error(), "users_login_key") {
+		return User{}, ErrLoginTaken
+	}
 	if err != nil {
 		return User{}, err
 	}
@@ -257,7 +295,8 @@ func (s *Store) UserBySession(ctx context.Context, token string) (User, error) {
 	}
 	u, err := scanUser(s.pool.QueryRow(ctx, `UPDATE sessions s SET last_seen_at = now()
 		FROM users u WHERE s.token_hash = $1 AND s.expires_at > now() AND u.id = s.user_id AND u.active
-		RETURNING u.id, u.login, u.full_name, u.role, u.employee_id, u.active, u.created_at, u.last_login_at`, tokenHash(token)))
+		RETURNING u.id, u.login, u.full_name, u.role, u.employee_id, u.active, u.created_at, u.last_login_at,
+		  (SELECT jira_login FROM employees e WHERE e.id = u.employee_id)`, tokenHash(token)))
 	return u, err
 }
 

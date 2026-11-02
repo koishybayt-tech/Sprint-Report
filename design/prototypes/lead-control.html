@@ -1,0 +1,303 @@
+<style>
+#dash-root .mp{font-family:var(--font-anthropic-sans);color:var(--color-fg);display:flex;flex-direction:column;gap:var(--cds-gap-lg)}
+.mp-head h1{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);margin:0}
+.mp-upd{margin:var(--cds-gap-xs) 0 0;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mp-upd b{color:var(--color-fg);font-weight:600}
+.mp-take{margin:var(--cds-gap-xs) 0 0;color:var(--color-fg-muted);font-size:var(--cds-font-size-body)}
+.mp-take b,.mp .mp-take b{font-weight:600;color:var(--color-fg)}
+.mp-bar{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center}
+.mp-lbl{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);min-width:6.5rem}
+.mp-chip{font:inherit;font-size:var(--cds-font-size-caption);padding:var(--cds-pad-xs) var(--cds-pad-sm);border:1px solid var(--color-border-line);border-radius:999px;background:var(--color-bg);color:var(--color-fg);cursor:pointer}
+.mp-chip[aria-pressed=true]{background:var(--color-fg);color:var(--color-bg);border-color:var(--color-fg)}
+.mp-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5rem),1fr));gap:var(--cds-gap-md)}
+.mp-tile{text-align:left;font:inherit;background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-md) var(--cds-pad-lg);cursor:pointer;color:var(--color-fg);display:flex;flex-direction:column;gap:var(--cds-gap-xs)}
+.mp-tile[aria-selected=true]{outline:2px solid var(--color-fg);outline-offset:-1px}
+.mp-tile .n{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-title);font-weight:400;font-variant-numeric:tabular-nums;min-height:1.2em}
+.mp-tile .l{font-size:var(--cds-font-size-body);font-weight:var(--cds-font-weight-medium)}
+.mp-tile .s{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mp-card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:flex;flex-direction:column;gap:var(--cds-gap-sm);min-width:0}
+.mp-card h2{margin:0;font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium)}
+.mp-note{margin:0;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mp-tools{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center;font-size:var(--cds-font-size-caption)}
+.mp-tools select,.mp-tools input[type=search]{font:inherit;padding:var(--cds-pad-xs) var(--cds-pad-sm);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:var(--color-bg);color:var(--color-fg)}
+.mp-tools label{display:flex;gap:var(--cds-gap-xs);align-items:center;color:var(--color-fg-muted)}
+.mp-scroll{overflow:auto;max-height:70vh;border-top:1px solid var(--color-border-line)}
+.mp-t{border-collapse:collapse;width:100%;font-size:var(--cds-font-size-caption);font-variant-numeric:tabular-nums}
+.mp-t th{position:sticky;top:0;background:var(--color-panel);text-align:left;font-weight:var(--cds-font-weight-medium);color:var(--color-fg-muted);padding:var(--cds-pad-xs) var(--cds-pad-sm);border-bottom:1px solid var(--color-border-line);white-space:nowrap;cursor:pointer;z-index:1}
+.mp-t td{padding:var(--cds-pad-xs) var(--cds-pad-sm);border-bottom:1px solid var(--color-border-line);vertical-align:top}
+.mp-t td.num{text-align:right;white-space:nowrap}
+.mp-t td.k{white-space:nowrap}
+.mp-t td.w{min-width:16rem}
+.mp-t td.x{min-width:12rem;color:var(--color-fg-muted)}
+.mp-t a{color:inherit;text-decoration:underline;text-decoration-color:var(--color-border-line);white-space:nowrap}.mp-t a:hover{text-decoration-color:currentColor}.mp-t td.x a{color:var(--color-fg)}
+.mp-t tr.hot td.hd{color:var(--color-bad);font-weight:600}
+.mp-t tr.warm td.hd{color:var(--color-warn);font-weight:600}
+.mp-t td.flag-bad{color:var(--color-bad);font-weight:600}
+.mp-t td.flag-ok{color:var(--color-ok);font-weight:600}
+.mp-t td.flag-warn{color:var(--color-warn);font-weight:600}
+.mp-pane[hidden]{display:none}
+.mp-empty{padding:var(--cds-pad-md);color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.mp-sp{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:var(--cds-gap-sm)}
+.mp-sp .row{display:flex;flex-direction:column;gap:4px;font-size:var(--cds-font-size-caption)}
+.mp-sp .nm{display:flex;justify-content:space-between;gap:var(--cds-gap-sm)}
+.mp-sp .nm span:last-child{color:var(--color-fg-muted)}
+.mp-sp .st{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--color-border-line)}
+.mp-sp .st i{display:block;height:100%}
+.mp-lg{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.mp-lg span{display:flex;align-items:center;gap:4px}.mp-lg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+[data-dash-source-state=refreshing]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+</style>
+<div class="mp">
+  <header class="mp-head" id="top">
+    <h1>Проекты руководителей · контроль спринта</h1>
+    <p class="mp-upd">Данные из Jira обновлены: <b class="mp-upd-v">—</b> (Алматы)</p>
+    <p class="mp-take"><span class="mp-take-txt dash-skeleton">—</span></p>
+  </header>
+  <div class="mp-bar mp-leads" role="group" aria-label="Руководитель"><span class="mp-lbl">Руководитель</span></div>
+  <div class="mp-bar mp-projs" role="group" aria-label="Проект"><span class="mp-lbl">Проект</span></div>
+  <div class="mp-tiles" role="tablist">
+    <button class="mp-tile" role="tab" data-tab="blocked"><span class="l">Заблокированы</span><span class="n dash-skeleton" data-source="totals" data-field="blocked">—</span><span class="s">в статусе Blocked</span></button>
+    <button class="mp-tile" role="tab" data-tab="work"><span class="l">Долго в работе</span><span class="n dash-skeleton" data-source="totals" data-field="long_work">—</span><span class="s">≥ 5 дн. в текущем статусе</span></button>
+    <button class="mp-tile" role="tab" data-tab="people"><span class="l">Тормозят задачи</span><span class="n dash-skeleton" data-source="totals" data-field="stalled_people">—</span><span class="s">сотрудники: здесь стоит, у других руководителей двигается</span></button>
+    <button class="mp-tile" role="tab" data-tab="gaps"><span class="l">Дизайн или бэк готов, а продолжения нет</span><span class="n dash-skeleton" data-source="totals" data-field="gaps_all">—</span><span class="s">текущий спринт: нет задачи на фронт или бэк</span></button>
+    <button class="mp-tile" role="tab" data-tab="test"><span class="l">Долго на тесте</span><span class="n dash-skeleton" data-source="totals" data-field="long_test">—</span><span class="s">≥ 3 дн. в статусе Test</span></button>
+  </div>
+
+  <section class="mp-card mp-pane" id="blocked" data-pane="blocked">
+    <h2>Заблокированные задачи</h2>
+    <p class="mp-note">Кто кого ждёт: фронт ждёт связанные задачи дизайна и бэка, бэк (и ИИ) ждёт только дизайн, дизайн никого не ждёт. Задачи берутся по связям в Jira. «Ждёт задачу» — первая блокирующая задача, ещё не дошедшая до теста (сначала бэк, потом дизайн); красным — она даже не начата. Если все блокирующие задачи уже на тесте или дальше — «Можно снимать блок» с датой, когда последняя из них ушла на тест.</p>
+    <div class="mp-tools"><input type="search" class="mp-q" placeholder="Поиск" aria-label="Поиск"></div>
+    <div class="mp-scroll"><table class="mp-t" data-source="blocked" data-row-key="key"></table></div>
+  </section>
+
+  <section class="mp-card mp-pane" id="work" data-pane="work" hidden>
+    <h2>Задачи, которые долго в работе</h2>
+    <p class="mp-note">«В работе», Code review и Need Rework. Дни в статусе — с последнего перехода в него по истории Jira; «с начала» — с первого перехода в «В работе». Красным — от 10 дн., оранжевым — от 5.</p>
+    <div class="mp-tools"><label><input type="checkbox" class="mp-all"> показать все, не только ≥ 5 дн.</label><input type="search" class="mp-q" placeholder="Поиск" aria-label="Поиск"></div>
+    <div class="mp-scroll"><table class="mp-t" data-source="in_work" data-row-key="key"></table></div>
+  </section>
+
+  <section class="mp-card mp-pane" id="people" data-pane="people" hidden>
+    <h2>Сотрудники: задачи руководителя стоят, а у другого руководителя двигаются</h2>
+    <p class="mp-note">Считаются действия самого сотрудника по истории Jira: «взял» — перевёл задачу в «В работе», «завершил» — перевёл в Code review, Test или дальше. «Тормозит» — у него есть задачи этого руководителя в «Сделать», «В работе» или Need Rework без смены статуса ≥ 3 дн., а за последние 7 дней он брал и завершал задачи других руководителей чаще, чем делал что-то по задачам этого руководителя. Тестировщики и ПМ не помечаются.</p>
+    <div class="mp-tools"><label><input type="checkbox" class="mp-all"> показать всех, не только с сигналом</label><input type="search" class="mp-q" placeholder="Поиск" aria-label="Поиск"></div>
+    <div class="mp-scroll"><table class="mp-t" data-source="people" data-row-key="lead,person"></table></div>
+  </section>
+
+  <section class="mp-card mp-pane" id="gaps" data-pane="gaps" hidden>
+    <h2>Дизайн или бэк готов, а продолжения нет</h2>
+    <p class="mp-note">Только задачи текущего спринта. Плитка показывает число строк этой таблицы; по клику на плитку фильтры сбрасываются. Приоритет: «Высокий» — нет задачи на фронт; «Проверить» — найдена только похожая задача или бэк готов без фронта; «Низкий» — дизайн без бэка, дизайн-задачи без разработки, исправления ошибок.</p>
+    <p class="mp-note">Пара ищется по связи Relate, по одинаковому названию после «Дизайн -» / «Фронт -» / «БЭК -» и по похожему названию («похоже N%» — проверить вручную). Готовый фронт без бэка проблемой не считается.</p>
+    <div class="mp-tools">
+      <label>Приоритет <select class="mp-pr"><option value="">все</option><option>Будущий спринт</option><option>Высокий</option><option>Проверить</option><option>Низкий</option></select></label>
+      <label>Чего нет <select class="mp-miss"><option value="">всё</option><option>Нет фронта и бэка</option><option>Нет фронта</option><option>Нет бэка</option></select></label>
+      <label>Тип <select class="mp-kind"><option value="">все</option><option>Дизайн</option><option>Бэк</option></select></label>
+      <input type="search" class="mp-q" placeholder="Поиск" aria-label="Поиск">
+    </div>
+    <div class="mp-scroll"><table class="mp-t" data-source="gaps" data-row-key="key"></table></div>
+  </section>
+
+  <section class="mp-card mp-pane" id="test" data-pane="test" hidden>
+    <h2>Задачи, которые долго на тесте</h2>
+    <p class="mp-note">Тестировщик — из поля «Тестировщик» в Jira (в части задач там стоит значение по умолчанию). Дни с последнего перехода в Test. Красным — от 7 дн., оранжевым — от 3.</p>
+    <div class="mp-tools"><label><input type="checkbox" class="mp-all"> показать все, не только ≥ 3 дн.</label><input type="search" class="mp-q" placeholder="Поиск" aria-label="Поиск"></div>
+    <div class="mp-scroll"><table class="mp-t" data-source="testing" data-row-key="key"></table></div>
+  </section>
+
+  <section class="mp-card" id="sprints">
+    <h2>Открытые спринты</h2>
+    <p class="mp-note">Распределение задач текущего спринта по статусам.</p>
+    <div class="mp-sp" data-source="sprint"></div>
+    <div class="mp-lg"></div>
+  </section>
+</div>
+<script>
+dash.calc('totals', {
+  title: 'Итоги по руководителям и проектам',
+  description: 'Счётчики плиток для каждого руководителя: по всем его проектам и по каждому проекту.',
+  inputs: ['blocked', 'in_work', 'testing', 'people', 'gaps'],
+  fn: (blocked, in_work, testing, people, gaps) => {
+    const LP = { 'Қойшыбай Темірлан': ['all', 'AC', 'EDO', 'DO', 'SUP', 'AML'], 'Тажибаев Нурлыбек': ['all', 'ADTC', 'AIJ', 'AL', 'AAP', 'API'] };
+    return Object.entries(LP).flatMap(([lead, ps]) => ps.map((p) => {
+      const m = (r) => r.lead === lead && (p === 'all' || r.project === p);
+      const b = blocked.filter(m);
+      return {
+        lead, project: p,
+        blocked: b.length,
+        blocked_wait: b.filter((r) => r.not_started === 'да').length,
+        can_unblock: b.filter((r) => r.block_state.startsWith('Можно')).length,
+        long_work: in_work.filter((r) => m(r) && r.days_in_status >= 5).length,
+        long_test: testing.filter((r) => m(r) && r.days_in_test >= 3).length,
+        stalled_people: people.filter((r) => r.lead === lead && r.signal === 'Тормозит' && (p === 'all' || r.projects.split(' ').includes(p))).length,
+        gaps_all: gaps.filter(m).length,
+        gaps_high: gaps.filter((r) => m(r) && (r.priority === 'Высокий' || r.priority === 'Будущий спринт')).length
+      };
+    }));
+  }
+});
+</script>
+<script>
+const J = (k) => 'https://jira.adata.kz/browse/' + k;
+const LEADS = { 'Қойшыбай Темірлан': [['AC', 'Комплаенс'], ['EDO', 'ЭДО'], ['DO', 'Digital Office'], ['SUP', 'Снабжение'], ['AML', 'AML']], 'Тажибаев Нурлыбек': [['ADTC', 'Counterparty'], ['AIJ', 'AI Адвокат'], ['AL', 'Landing'], ['AAP', 'Admin Panel'], ['API', 'Adata API']] };
+const LN = { 'Қойшыбай Темірлан': 'Темирлан', 'Тажибаев Нурлыбек': 'Нурлыбек' };
+const L = () => LEADS[dash.params().lead] ? dash.params().lead : 'Қойшыбай Темірлан';
+const P = () => { const p = dash.params().proj || 'all'; return p === 'all' || LEADS[L()].some((x) => x[0] === p) ? p : 'all'; };
+const mkChip = (txt, on, fn) => { const b = document.createElement('button'); b.className = 'mp-chip'; b.textContent = txt; b.setAttribute('aria-pressed', on); b.addEventListener('click', fn); return b; };
+function drawChips() {
+  const lb = document.querySelector('.mp-leads'), pb = document.querySelector('.mp-projs');
+  lb.replaceChildren(lb.firstElementChild, ...Object.keys(LEADS).map((l) => mkChip(LN[l] + ' · ' + l, l === L(), () => dash.setParams({ lead: l, proj: 'all' }))));
+  pb.replaceChildren(pb.firstElementChild, mkChip('Все проекты', P() === 'all', () => dash.setParams({ proj: 'all' })), ...LEADS[L()].map(([k, n]) => mkChip(n + ' (' + k + ')', P() === k, () => dash.setParams({ proj: k }))));
+}
+const TAB = () => dash.params().tab || 'blocked';
+const nf = (v) => v === null || v === undefined || v === '' ? '—' : String(v);
+const st = { sort: {}, q: {}, all: {} };
+const COLS = {
+  blocked: [['key','Задача','k'],['assignee','Исполнитель'],['role','Роль'],['days_blocked','Дн. в Blocked','num hd'],['block_state','Что с блоком','w'],['waiting_key','Ждёт задачу','k'],['waiting_role','Её роль'],['waiting_status','Её статус'],['waiting_assignee','Её исполнитель'],['not_started','Не начата'],['blockers','Блокирующие задачи (статус, когда ушла на тест)','x'],['summary','Название','w'],['related','Прочие связанные','x']],
+  in_work: [['key','Задача','k'],['status','Статус'],['assignee','Исполнитель'],['role','Роль'],['days_in_status','Дн. в статусе','num hd'],['days_since_start','Дн. с начала','num'],['total_days_in_status','Всего в статусе','num'],['reworks','Возвратов','num'],['sprints','Спринтов','num'],['summary','Название','w']],
+  people: [['person','Сотрудник'],['role','Роль'],['signal','Сигнал'],['my_stale','Стоят ≥ 3 дн.','num hd'],['my_open','Открытых здесь','num'],['my_actions_7d','Его действия здесь, 7 дн.','num'],['my_last_action_days','Посл. действие здесь, дн. назад','num'],['other_started_7d','Взял у других, 7 дн.','num'],['other_finished_7d','Завершил у других, 7 дн.','num'],['my_tasks','Задачи здесь (дн. без движения)','x'],['other_projects','Другие проекты (руководитель) — действий','x'],['other_tasks','Что делал у других','x']],
+  gaps: [['key','Задача','k'],['priority','Приоритет'],['kind','Тип'],['status','Статус'],['assignee','Исполнитель'],['missing','Чего нет'],['problem','Проблема','w'],['front','Фронт','x'],['back','Бэк','x'],['sprint','Спринт'],['summary','Название','w']],
+  testing: [['key','Задача','k'],['assignee','Исполнитель'],['role','Роль'],['days_in_test','Дн. на тесте','num hd'],['tester','Тестировщик'],['days_since_start','Дн. с начала','num'],['sprints','Спринтов','num'],['is_bug','Баг'],['summary','Название','w']]
+};
+const HOT = { blocked: (r) => r.not_started === 'да' ? 'hot' : '', in_work: (r) => r.days_in_status >= 10 ? 'hot' : r.days_in_status >= 5 ? 'warm' : '', testing: (r) => r.days_in_test >= 7 ? 'hot' : r.days_in_test >= 3 ? 'warm' : '', people: (r) => r.signal === 'Тормозит' ? 'hot' : r.signal ? 'warm' : '', gaps: (r) => r.priority === 'Высокий' || r.priority === 'Будущий спринт' ? 'hot' : r.priority === 'Проверить' ? 'warm' : '' };
+const DEF = { blocked: ['days_blocked', -1], in_work: ['days_in_status', -1], testing: ['days_in_test', -1], people: ['my_stale', -1], gaps: ['priority', 1] };
+const PRI = { 'Будущий спринт': 0, 'Высокий': 1, 'Проверить': 2, 'Низкий': 3 };
+const keep = {
+  blocked: () => true,
+  in_work: (r, all) => all || r.days_in_status >= 5,
+  testing: (r, all) => all || r.days_in_test >= 3,
+  people: (r, all) => all || !!r.signal,
+  gaps: (r) => {
+    const sec = document.getElementById('gaps');
+    const pr = sec.querySelector('.mp-pr').value, kd = sec.querySelector('.mp-kind').value, ms = sec.querySelector('.mp-miss').value;
+    return (!pr || r.priority === pr) && (!kd || r.kind === kd) && (!ms || r.missing === ms);
+  }
+};
+const projOk = (id, r, p) => r.lead === L() && (p === 'all' || (id === 'people' ? r.projects.split(' ').includes(p) : r.project === p));
+
+function drawTable(id) {
+  const tbl = document.querySelector(`table[data-source="${id}"]`);
+  const d = dash.data(id), cols = COLS[id], p = P();
+  const sec = tbl.closest('section');
+  const q = (sec.querySelector('.mp-q')?.value || '').toLowerCase();
+  const allBox = sec.querySelector('.mp-all');
+  const thead = document.createElement('thead'), hr = document.createElement('tr');
+  const [sk, sd] = st.sort[id] || DEF[id];
+  cols.forEach(([f, label]) => {
+    const th = document.createElement('th');
+    th.dataset.field = f; th.textContent = label;
+    if (f === sk) th.setAttribute('aria-sort', sd > 0 ? 'ascending' : 'descending');
+    th.addEventListener('click', () => { const cur = st.sort[id] || DEF[id]; st.sort[id] = [f, cur[0] === f ? -cur[1] : -1]; drawTable(id); });
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  const tb = document.createElement('tbody');
+  let rows = d.status === 'ok' ? d.data.filter((r) => projOk(id, r, p) && keep[id](r, allBox && allBox.checked)) : [];
+  if (q) rows = rows.filter((r) => cols.some(([f]) => String(r[f] ?? '').toLowerCase().includes(q)));
+  const val = (r) => sk === 'priority' ? PRI[r[sk]] : r[sk];
+  rows.sort((a, b) => {
+    const x = val(a), y = val(b);
+    if (x === y) return 0; if (x === null || x === undefined) return 1; if (y === null || y === undefined) return -1;
+    return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ru')) * sd;
+  });
+  rows.forEach((r) => {
+    const tr = document.createElement('tr');
+    const h = HOT[id](r); if (h) tr.className = h;
+    if (id === 'people') tr.dataset.key = encodeURIComponent(r.lead) + ',' + encodeURIComponent(r.person);
+    cols.forEach(([f, , cls]) => {
+      const td = document.createElement('td');
+      if (cls) td.className = cls;
+      const v = r[f];
+      if ((f === 'key' || f === 'waiting_key') && v) { const a = document.createElement('a'); a.href = J(v); a.target = '_blank'; a.rel = 'noopener'; a.textContent = v; td.appendChild(a); }
+      else if (typeof v === 'string' && /[A-Z]+-\d+/.test(v)) {
+        let last = 0; const rx = /[A-Z]+-\d+/g; let m;
+        while ((m = rx.exec(v))) {
+          if (m.index > last) td.appendChild(document.createTextNode(v.slice(last, m.index)));
+          const a = document.createElement('a'); a.href = J(m[0]); a.target = '_blank'; a.rel = 'noopener'; a.textContent = m[0]; td.appendChild(a);
+          last = m.index + m[0].length;
+        }
+        if (last < v.length) td.appendChild(document.createTextNode(v.slice(last)));
+      }
+      else td.textContent = nf(v);
+      if (f === 'signal' && v) td.classList.add(v === 'Тормозит' ? 'flag-bad' : 'flag-warn');
+      if (f === 'not_started' && v === 'да') td.classList.add('flag-bad');
+      if (f === 'block_state' && v && !v.startsWith('Ждёт')) td.classList.add(v.startsWith('Можно') ? 'flag-ok' : 'flag-warn');
+      if (f === 'priority' && v !== 'Низкий') td.classList.add(v === 'Проверить' ? 'flag-warn' : 'flag-bad');
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  tbl.replaceChildren(thead, tb);
+  let em = sec.querySelector('.mp-empty');
+  if (!rows.length) {
+    if (!em) { em = document.createElement('div'); em.className = 'mp-empty'; sec.appendChild(em); }
+    em.textContent = d.status === 'ok' ? 'Нет задач по этому фильтру.' : d.status === 'error' ? 'Не удалось загрузить.' : 'Загрузка…';
+  } else if (em) em.remove();
+}
+
+const SC = [['done', 'Готово', '--color-ok'], ['ready', 'Ready for deploy', null, 2], ['test', 'Test', null, 1], ['review', 'Code review', null, 3], ['in_work', 'В работе', null, 0], ['rework', 'Need Rework', '--color-warn'], ['blocked', 'Blocked', '--color-bad'], ['todo', 'Сделать', '--cds-chart-muted']];
+const col = (c) => c[2] ? `var(${c[2]})` : dash.colors[c[3]];
+function drawUpd() {
+  const el = document.querySelector('.mp-upd-v'), d = dash.data('sprint');
+  const r = d.status === 'ok' ? d.data.find((x) => x.lead === L()) : null;
+  el.dataset.source = 'sprint'; el.dataset.field = 'snapshot'; el.dataset.where = 'lead=' + encodeURIComponent(L()) + (r ? '&project=' + r.project : '');
+  el.textContent = r ? r.snapshot : '—';
+}
+function drawSprints() {
+  const box = document.querySelector('.mp-sp'), d = dash.data('sprint'), p = P();
+  box.replaceChildren();
+  if (d.status !== 'ok') return;
+  d.data.filter((r) => r.lead === L() && (p === 'all' || r.project === p)).forEach((r) => {
+    const row = document.createElement('div'); row.className = 'row';
+    const nm = document.createElement('div'); nm.className = 'nm';
+    const a = document.createElement('span'); a.textContent = r.project + ' · ' + r.sprint;
+    const b = document.createElement('span'); b.textContent = r.total + ' задач';
+    nm.append(a, b);
+    const bar = document.createElement('div'); bar.className = 'st';
+    SC.forEach((c) => { if (!r[c[0]]) return; const i = document.createElement('i'); i.style.width = (r[c[0]] / r.total * 100) + '%'; i.style.background = col(c); i.title = c[1] + ': ' + r[c[0]]; bar.appendChild(i); });
+    row.append(nm, bar); box.appendChild(row);
+  });
+  const lg = document.querySelector('.mp-lg');
+  lg.replaceChildren(...SC.map((c) => { const s = document.createElement('span'); const i = document.createElement('i'); i.style.background = col(c); s.append(i, document.createTextNode(c[1])); return s; }));
+}
+
+function drawTotals() {
+  const t = dash.data('totals'), p = P();
+  const row = t.status === 'ok' ? t.data.find((r) => r.lead === L() && r.project === p) : null;
+  const wh = 'lead=' + encodeURIComponent(L()) + '&project=' + p;
+  document.querySelectorAll('.mp-tile .n').forEach((el) => {
+    el.dataset.where = wh;
+    if (t.status === 'ok' || t.status === 'error') el.classList.remove('dash-skeleton');
+    el.textContent = row ? String(row[el.dataset.field]) : '—';
+  });
+  const tk = document.querySelector('.mp-take-txt');
+  tk.replaceChildren();
+  if (!row) { tk.textContent = '—'; return; }
+  tk.classList.remove('dash-skeleton');
+  const mk = (f) => { const b = document.createElement('b'); b.dataset.source = 'totals'; b.dataset.field = f; b.dataset.where = wh; b.textContent = String(row[f]); return b; };
+  if (row.blocked) tk.append(mk('blocked_wait'), ' из ', mk('blocked'), ' заблокированных задач ждут задачу, которая ещё не начата; с ', mk('can_unblock'), ' блок можно снимать. ');
+  tk.append('Сотрудников, у которых здесь задачи стоят, а у других руководителей двигаются: ', mk('stalled_people'), '.');
+}
+
+function showTab() {
+  const t = TAB();
+  document.querySelectorAll('.mp-pane').forEach((s) => { s.hidden = s.dataset.pane !== t; });
+  document.querySelectorAll('.mp-tile').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === t));
+}
+document.querySelectorAll('.mp-tile').forEach((b) => b.addEventListener('click', () => {
+  if (b.dataset.tab === 'gaps') { document.querySelector('#gaps .mp-pr').value = ''; document.querySelector('#gaps .mp-kind').value = ''; document.querySelector('#gaps .mp-miss').value = ''; document.querySelector('#gaps .mp-q').value = ''; }
+  dash.setParams({ tab: b.dataset.tab }); dash.setLink(b.dataset.tab); drawTable('gaps');
+}));
+const IDS = { blocked: 'blocked', work: 'in_work', people: 'people', gaps: 'gaps', test: 'testing' };
+Object.entries(IDS).forEach(([pane, id]) => {
+  const sec = document.getElementById(pane);
+  sec.querySelectorAll('input,select').forEach((el) => el.addEventListener(el.type === 'search' ? 'input' : 'change', () => drawTable(id)));
+});
+const h = location.hash.slice(1);
+if (IDS[h]) dash.setParams({ tab: h });
+dash.onData(() => {
+  const p = P();
+  drawChips();
+  showTab(); drawUpd(); drawTotals(); Object.values(IDS).forEach(drawTable); drawSprints();
+});
+</script>
+

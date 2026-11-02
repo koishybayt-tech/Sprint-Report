@@ -15,6 +15,8 @@ tags:
   - name: employees
   - name: snapshots
   - name: pm
+  - name: lead-control
+  - name: notifications
   - name: admin
   - name: telegram
 
@@ -223,6 +225,165 @@ paths:
         - { name: date, in: path, required: true, schema: { type: string, format: date } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /lead-control/leads:
+    get:
+      tags: [lead-control]
+      operationId: getLeadControlLeads
+      summary: Руководители и их проекты (admin — все, lead — только он сам)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LeadControlLead' } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /lead-control:
+    get:
+      tags: [lead-control]
+      operationId: getLeadControl
+      summary: Контроль спринта руководителя — плитки, вкладки, полоса спринтов (docs/lead-control.md)
+      parameters:
+        - name: lead
+          in: query
+          required: false
+          schema: { type: string }
+          description: ФИО руководителя; по умолчанию — сам пользователь (lead) или первый из справочника (admin)
+        - name: project
+          in: query
+          required: false
+          schema: { type: string }
+          description: Ключ проекта руководителя; пусто или all — все проекты
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadControl' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Руководителя нет в справочнике }
+
+  /lead-control/gaps/ignore:
+    post:
+      tags: [lead-control]
+      operationId: ignoreLeadControlGap
+      summary: «Игнорировать» — продолжение не нужно, задача скрывается из разрывов и больше не уведомляет
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LeadControlGapRef' } } }
+      responses:
+        '204': { description: Скрыта }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [lead-control]
+      operationId: unignoreLeadControlGap
+      summary: Вернуть скрытую задачу в разрывы
+      parameters:
+        - { name: lead, in: query, required: true, schema: { type: string } }
+        - { name: key, in: query, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Возвращена }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: Колокольчик — последние уведомления и число непрочитанных
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationList' } } } }
+  /notifications/read:
+    post:
+      tags: [notifications]
+      summary: Отметить прочитанными (ids или all)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: { type: array, items: { type: integer, format: int64 } }
+                all: { type: boolean }
+      responses:
+        '204': { description: OK }
+  /notifications/settings:
+    get:
+      tags: [notifications]
+      summary: Какие события присылать и подключён ли личный Telegram-бот (admin, lead)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotifySettings' } } } }
+    put:
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                on_blocked: { type: boolean }
+                on_unblock: { type: boolean }
+                on_gap: { type: boolean }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotifySettings' } } } }
+  /notifications/telegram:
+    post:
+      tags: [notifications]
+      summary: Подключить личного бота (токен из @BotFather; хранится зашифрованным, в ответах не возвращается)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotifySettings' } } } }
+        '400': { description: Неверный токен или не задан SECRETS_KEY }
+    delete:
+      tags: [notifications]
+      summary: Отключить бота
+      responses:
+        '204': { description: OK }
+  /notifications/test:
+    post:
+      tags: [notifications]
+      summary: Проверить уведомление — пример события в колокольчик и, если бот привязан, в Telegram
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind: { type: string, enum: [blocked, unblock, gap], description: какое событие показать; пусто — общий тест }
+      responses:
+        '200':
+          description: Куда дошло
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bell, telegram]
+                properties:
+                  bell: { type: boolean }
+                  telegram: { type: string, enum: [sent, not_connected, unavailable, error] }
+                  error: { type: string }
+
+  /admin/lead-projects:
+    get:
+      tags: [admin]
+      summary: Справочник «руководитель → проекты» (admin)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/LeadProjectRow' } } } } }
+    post:
+      tags: [admin]
+      summary: Добавить пару или изменить название и порядок (admin)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LeadProjectRow' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadProjectRow' } } } }
+        '400': { description: Нет руководителя или неверный ключ проекта }
+    delete:
+      tags: [admin]
+      summary: Убрать проект у руководителя (admin)
+      parameters:
+        - { name: lead, in: query, required: true, schema: { type: string } }
+        - { name: project, in: query, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Удалено }
+        '404': { description: Такой пары нет }
 
   /pm-load:
     get:
@@ -492,3 +653,209 @@ components:
         text: { type: string }
         reason: { type: string, enum: [manual, unknown_author] }
         parse_result: { type: object, additionalProperties: true }
+    LeadProjectRow:
+      type: object
+      required: [lead, project_key, title, position]
+      properties:
+        lead: { type: string }
+        project_key: { type: string }
+        title: { type: string }
+        position: { type: integer }
+    LeadControlProject:
+      type: object
+      required: [key, title]
+      properties:
+        key: { type: string }
+        title: { type: string }
+    LeadControlLead:
+      type: object
+      required: [lead, projects]
+      properties:
+        lead: { type: string }
+        projects: { type: array, items: { $ref: '#/components/schemas/LeadControlProject' } }
+    LeadControlTotals:
+      type: object
+      description: "Счётчики плиток: по всем проектам (project = all) и по каждому"
+      required: [lead, project, blocked, blocked_wait, can_unblock, long_work, long_test, stalled_people, gaps_all, gaps_high]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        blocked: { type: integer }
+        blocked_wait: { type: integer, description: "ждут задачу, которая ещё не начата" }
+        can_unblock: { type: integer }
+        long_work: { type: integer, description: "от 5 дн. в текущем статусе" }
+        long_test: { type: integer, description: "от 3 дн. в Test" }
+        stalled_people: { type: integer }
+        gaps_all: { type: integer }
+        gaps_high: { type: integer, description: "Высокий и Будущий спринт" }
+    LeadControlSprint:
+      type: object
+      description: Полоса статусов открытого спринта
+      required: [lead, project, sprint, total, done, ready, test, review, in_work, rework, blocked, todo, snapshot]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        sprint: { type: string }
+        total: { type: integer }
+        done: { type: integer }
+        ready: { type: integer }
+        test: { type: integer }
+        review: { type: integer }
+        in_work: { type: integer }
+        rework: { type: integer }
+        blocked: { type: integer }
+        todo: { type: integer }
+        snapshot: { type: string, description: "время данных Jira, ДД.ММ.ГГГГ ЧЧ:ММ (Алматы)" }
+    LeadControlBlocked:
+      type: object
+      required: [lead, project, key, assignee, role, days_blocked, block_state, waiting_key, waiting_role, waiting_status, waiting_assignee, not_started, blockers, summary, related]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        key: { type: string }
+        assignee: { type: string }
+        role: { type: string }
+        days_blocked: { type: integer }
+        block_state: { type: string, description: "Можно снимать блок · с ДД.ММ / Ждёт: … / Нет связанных задач, которых она ждёт" }
+        waiting_key: { type: string }
+        waiting_role: { type: string }
+        waiting_status: { type: string }
+        waiting_assignee: { type: string }
+        not_started: { type: string, description: "да, нет или пусто" }
+        blockers: { type: string }
+        summary: { type: string }
+        related: { type: string }
+    LeadControlInWork:
+      type: object
+      required: [lead, project, key, status, assignee, role, days_in_status, days_since_start, total_days_in_status, reworks, sprints, summary]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        key: { type: string }
+        status: { type: string }
+        assignee: { type: string }
+        role: { type: string }
+        days_in_status: { type: integer }
+        days_since_start: { type: integer, nullable: true }
+        total_days_in_status: { type: integer }
+        reworks: { type: integer }
+        sprints: { type: integer }
+        summary: { type: string }
+    LeadControlPerson:
+      type: object
+      required: [lead, person, role, signal, my_stale, my_open, my_actions_7d, my_last_action_days, other_started_7d, other_finished_7d, my_tasks, other_projects, other_tasks, projects]
+      properties:
+        lead: { type: string }
+        person: { type: string }
+        role: { type: string }
+        signal: { type: string, description: "Тормозит или пусто" }
+        my_stale: { type: integer }
+        my_open: { type: integer }
+        my_actions_7d: { type: integer }
+        my_last_action_days: { type: integer, nullable: true }
+        other_started_7d: { type: integer }
+        other_finished_7d: { type: integer }
+        my_tasks: { type: string }
+        other_projects: { type: string }
+        other_tasks: { type: string }
+        projects: { type: string, description: "проекты руководителя с его открытыми задачами, через пробел" }
+    LeadControlGap:
+      type: object
+      required: [lead, project, key, priority, kind, status, assignee, missing, problem, front, back, sprint, summary, create_url]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        key: { type: string }
+        priority: { type: string, enum: [Будущий спринт, Высокий, Проверить, Низкий] }
+        kind: { type: string, enum: [Дизайн, Бэк] }
+        status: { type: string }
+        assignee: { type: string }
+        missing: { type: string, enum: [Нет фронта и бэка, Нет фронта, Нет бэка] }
+        problem: { type: string }
+        front: { type: string }
+        back: { type: string }
+        sprint: { type: string }
+        summary: { type: string }
+        create_url: { type: string, description: форма создания продолжения в Jira }
+    LeadControlTesting:
+      type: object
+      required: [lead, project, key, assignee, role, days_in_test, tester, days_since_start, sprints, is_bug, summary]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        key: { type: string }
+        assignee: { type: string }
+        role: { type: string }
+        days_in_test: { type: integer }
+        tester: { type: string }
+        days_since_start: { type: integer, nullable: true }
+        sprints: { type: integer }
+        is_bug: { type: string }
+        summary: { type: string }
+    LeadControl:
+      type: object
+      description: Контроль спринта руководителя (docs/lead-control.md)
+      required: [updated_at, lead, projects, totals, sprints, blocked, in_work, people, gaps, testing, ignored]
+      properties:
+        updated_at: { type: string, format: date-time, description: "когда синхронизирована Jira" }
+        lead: { type: string }
+        projects: { type: array, items: { $ref: '#/components/schemas/LeadControlProject' } }
+        totals: { type: array, items: { $ref: '#/components/schemas/LeadControlTotals' } }
+        sprints: { type: array, items: { $ref: '#/components/schemas/LeadControlSprint' } }
+        blocked: { type: array, items: { $ref: '#/components/schemas/LeadControlBlocked' } }
+        in_work: { type: array, items: { $ref: '#/components/schemas/LeadControlInWork' } }
+        people: { type: array, items: { $ref: '#/components/schemas/LeadControlPerson' } }
+        gaps: { type: array, items: { $ref: '#/components/schemas/LeadControlGap' } }
+        testing: { type: array, items: { $ref: '#/components/schemas/LeadControlTesting' } }
+        ignored: { type: array, items: { $ref: '#/components/schemas/LeadControlIgnored' } }
+    LeadControlIgnored:
+      type: object
+      required: [lead, project, key, summary, by, at]
+      properties:
+        lead: { type: string }
+        project: { type: string }
+        key: { type: string }
+        summary: { type: string }
+        by: { type: string }
+        at: { type: string, format: date-time }
+    LeadControlGapRef:
+      type: object
+      required: [lead, key]
+      properties:
+        lead: { type: string }
+        key: { type: string }
+    Notification:
+      type: object
+      required: [id, kind, lead, issue_key, text, url, create_url, created_at, read]
+      properties:
+        id: { type: integer, format: int64 }
+        kind: { type: string, enum: [blocked, unblock, gap, test] }
+        lead: { type: string }
+        issue_key: { type: string }
+        text: { type: string }
+        url: { type: string }
+        create_url: { type: string }
+        created_at: { type: string, format: date-time }
+        read: { type: boolean }
+    NotificationList:
+      type: object
+      required: [unread, items]
+      properties:
+        unread: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+    NotifySettings:
+      type: object
+      required: [on_blocked, on_unblock, on_gap, telegram]
+      properties:
+        on_blocked: { type: boolean }
+        on_unblock: { type: boolean }
+        on_gap: { type: boolean }
+        telegram:
+          type: object
+          required: [available, configured, connected, bot, link]
+          properties:
+            available: { type: boolean, description: задан ли SECRETS_KEY на сервере }
+            configured: { type: boolean }
+            connected: { type: boolean, description: бот привязан к личному чату }
+            bot: { type: string }
+            link: { type: string, description: "ссылка t.me/<бот>?start=<код> для привязки" }

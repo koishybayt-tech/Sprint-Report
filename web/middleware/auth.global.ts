@@ -8,5 +8,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!me.value) return navigateTo({ path: '/login', query: to.fullPath !== '/' ? { next: to.fullPath } : {} })
   // HR не видит «Спринты» (docs/security.md) — ведём в «Посещаемость».
   if (to.path.startsWith('/sprints') && !canSeeSprints(me.value)) return navigateTo('/attendance')
-  if (to.path.startsWith('/snapshots') && !canSeeSnapshots(me.value)) return navigateTo('/attendance')
+  // Отдельной страницы снепшотов больше нет — они открываются в «Спринтах».
+  if (to.path.startsWith('/snapshots')) return navigateTo({ path: '/sprints', query: typeof to.query.date === 'string' ? { snap: to.query.date } : {} })
+  if (to.path.startsWith('/lead-control') && !canSeeLeadControl(me.value)) return navigateTo('/attendance')
 })

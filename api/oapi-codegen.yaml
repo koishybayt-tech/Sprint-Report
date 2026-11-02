@@ -1,0 +1,9 @@
+# oapi-codegen v2: пока генерируется только «Контроль спринта руководителей» (тег lead-control),
+# остальные эндпоинты написаны вручную в internal/api.
+package: lcapi
+output: internal/api/lcapi/lcapi.gen.go
+generate:
+  models: true
+  chi-server: true
+output-options:
+  include-tags: [lead-control]
