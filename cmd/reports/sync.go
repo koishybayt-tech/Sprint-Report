@@ -13,9 +13,11 @@ import (
 	"github.com/adata/reports/internal/config"
 	"github.com/adata/reports/internal/db"
 	"github.com/adata/reports/internal/jira"
+	"github.com/adata/reports/internal/metrics"
 )
 
 // runSync: reports sync jira [--full] | reports sync bitrix.
+// Без --full Jira синхронизируется инкрементально (только изменённые задачи); --full — всё, плюс проекты, тимлиды, справочник.| reports sync bitrix.
 // Для Jira пока есть только полная синхронизация; инкрементальная — следующий этап.
 func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 	if len(args) == 0 {
@@ -30,12 +32,9 @@ func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 		return fmt.Errorf("источник %q пока не поддерживается", source)
 	}
 	fs := flag.NewFlagSet("sync jira", flag.ContinueOnError)
-	full := fs.Bool("full", false, "полная синхронизация открытых спринтов")
+	full := fs.Bool("full", false, "полная синхронизация вместо инкрементальной")
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	if !*full {
-		log.Info("sync jira: инкрементальная синхронизация ещё не реализована, выполняю полную")
 	}
 
 	cfg, err := config.Load()
@@ -51,23 +50,60 @@ func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 		return err
 	}
 	defer pool.Close()
-	return syncJira(ctx, log, cfg, client, pool)
+	return syncJira(ctx, log, cfg, client, pool, *full)
 }
 
-// syncJira — один полный проход синхронизации Jira; общий для команды sync и worker.
-func syncJira(ctx context.Context, log *slog.Logger, cfg config.Config, client *jira.Client, pool *pgxpool.Pool) error {
+// syncJira — один проход синхронизации Jira: полный (full) или инкрементальный; общий для команды sync и worker.
+// Инкрементальный без прошлых запусков сам становится полным.
+func syncJira(ctx context.Context, log *slog.Logger, cfg config.Config, client *jira.Client, pool *pgxpool.Pool, full bool) error {
 	me, err := client.Myself(ctx)
 	if err != nil {
 		return fmt.Errorf("проверка токена Jira: %w", err)
 	}
-	log.Info("sync jira: старт", "base", cfg.JiraBaseURL, "user", me.Name)
 	t0 := time.Now()
+	if !full {
+		log.Info("sync jira: старт (изменённые задачи)", "user", me.Name)
+		st, err := jira.IncrementalSync(ctx, pool, client, log)
+		switch {
+		case errors.Is(err, jira.ErrNoBaseline):
+			log.Info("sync jira: прошлых запусков нет — делаю полную")
+		case err != nil:
+			return err
+		default:
+			log.Info("sync jira: готово (изменённые)", "changed", st.Changed, "added", st.Added, "removed", st.Removed,
+				"open", st.Open, "future", st.Future, "window", st.Since, "board_errors", st.BoardErrors, "took", time.Since(t0).Round(time.Second).String())
+			return nil
+		}
+	}
+	log.Info("sync jira: старт (полная)", "base", cfg.JiraBaseURL, "user", me.Name)
 	st, err := jira.FullSync(ctx, pool, client, log)
 	if err != nil {
 		return err
 	}
-	log.Info("sync jira: готово", "issues", st.Issues, "future_issues", st.FutureIssues, "projects", st.Projects,
+	log.Info("sync jira: готово (полная)", "issues", st.Issues, "future_issues", st.FutureIssues, "projects", st.Projects,
 		"sprints", st.Sprints, "future_sprints", st.FutureSprints, "team_leads", st.TeamLeads, "new_employees", st.NewEmployees,
 		"board_errors", st.BoardErrors, "took", time.Since(t0).Round(time.Second).String())
 	return nil
+}
+
+// fullSyncDue: полная синхронизация нужна, если её не было после последнего наступления JIRA_FULL_SYNC_AT
+// (по Алматы). Перезапуск worker днём не вызывает лишнюю полную, а ночная случится на ближайшем тике.
+func fullSyncDue(ctx context.Context, pool *pgxpool.Pool, at string) (bool, error) {
+	var last *time.Time
+	if err := pool.QueryRow(ctx, `SELECT max(started_at) FROM sync_runs WHERE source = 'jira' AND mode = 'full' AND ok`).Scan(&last); err != nil {
+		return false, err
+	}
+	if last == nil {
+		return true, nil
+	}
+	hm, err := time.Parse("15:04", at)
+	if err != nil {
+		return false, err
+	}
+	now := time.Now().In(metrics.Almaty)
+	mark := time.Date(now.Year(), now.Month(), now.Day(), hm.Hour(), hm.Minute(), 0, 0, metrics.Almaty)
+	if now.Before(mark) {
+		mark = mark.AddDate(0, 0, -1)
+	}
+	return last.Before(mark), nil
 }

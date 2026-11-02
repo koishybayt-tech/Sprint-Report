@@ -96,39 +96,11 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 		}
 	}
 
-	// Будущие спринты scrum-досок по каждому проекту, где есть задачи. Ошибка по одному проекту не валит синк.
 	inUse := map[string]bool{}
 	for _, is := range issues {
 		inUse[is.ProjectKey] = true
 	}
-	type future struct {
-		project string
-		board   int64
-		sp      AgileSprint
-	}
-	var futures []future
-	for key := range inUse {
-		boards, err := c.Boards(ctx, key)
-		if err != nil {
-			log.Warn("jira: доски проекта", "project", key, "err", err)
-			st.BoardErrors++
-			continue
-		}
-		for _, b := range boards {
-			if b.Type != "scrum" || b.ID == skipBoardID {
-				continue
-			}
-			sps, err := c.FutureSprints(ctx, b.ID)
-			if err != nil {
-				log.Warn("jira: будущие спринты доски", "project", key, "board", b.ID, "err", err)
-				st.BoardErrors++
-				continue
-			}
-			for _, s := range sps {
-				futures = append(futures, future{key, b.ID, s})
-			}
-		}
-	}
+	futures := loadFutures(ctx, c, log, inUse, st)
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
@@ -148,28 +120,9 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 	}
 	st.Projects = len(projects)
 
-	sprints := map[int64]Sprint{}
-	for _, is := range append(issues, futureIssues...) {
-		for _, s := range is.Sprints {
-			sprints[s.ID] = s
-		}
+	if st.Sprints, err = writeSprints(ctx, tx, append(issues, futureIssues...), futures); err != nil {
+		return err
 	}
-	for _, f := range futures {
-		if _, ok := sprints[f.sp.ID]; !ok {
-			sprints[f.sp.ID] = Sprint{ID: f.sp.ID, State: "FUTURE", Name: f.sp.Name,
-				Start: optTime(f.sp.StartDate), End: optTime(f.sp.EndDate)}
-		}
-	}
-	for _, s := range sprints {
-		if _, err := tx.Exec(ctx, `INSERT INTO jira_sprints (id, name, state, start_date, end_date, complete_date)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, state = EXCLUDED.state,
-			  start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date, complete_date = EXCLUDED.complete_date`,
-			s.ID, s.Name, s.State, s.Start, s.End, s.Done); err != nil {
-			return fmt.Errorf("спринт %d: %w", s.ID, err)
-		}
-	}
-	st.Sprints = len(sprints)
 
 	if _, err := tx.Exec(ctx, `UPDATE jira_issues SET in_open_sprints = false, in_future_sprints = false
 		WHERE in_open_sprints OR in_future_sprints`); err != nil {
@@ -183,14 +136,8 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 	}
 	st.Issues, st.FutureIssues = len(issues), len(futureIssues)
 
-	if _, err := tx.Exec(ctx, `DELETE FROM jira_project_future_sprints`); err != nil {
+	if err := writeFutures(ctx, tx, futures); err != nil {
 		return err
-	}
-	for _, f := range futures {
-		if _, err := tx.Exec(ctx, `INSERT INTO jira_project_future_sprints (project_key, board_id, sprint_id)
-			VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, f.project, f.board, f.sp.ID); err != nil {
-			return err
-		}
 	}
 	st.FutureSprints = len(futures)
 
@@ -215,18 +162,23 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 }
 
 // upsertIssues пишет задачи и выставляет флаг выборки (flag — имя колонки in_open_sprints | in_future_sprints).
+// Пустой flag — флаги не трогаем (инкрементальная синхронизация выставляет их отдельно по составу спринтов).
 func upsertIssues(ctx context.Context, tx pgx.Tx, issues []Issue, flag string) error {
+	flagCol, flagVal, flagSet := "", "", ""
+	if flag != "" {
+		flagCol, flagVal, flagSet = ", "+flag, ", true", ", "+flag+" = true"
+	}
 	q := `INSERT INTO jira_issues (key, project_key, summary, type, status_id, status_name, status_group,
 			assignee, assignee_login, reporter, tester, plan, position, epic_key, priority,
-			created, updated, resolved, timespent_s, sprint_ids, raw, synced_at, ` + flag + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21, now(), true)
+			created, updated, resolved, timespent_s, sprint_ids, raw, synced_at` + flagCol + `)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21, now()` + flagVal + `)
 		ON CONFLICT (key) DO UPDATE SET project_key = EXCLUDED.project_key, summary = EXCLUDED.summary,
 		  type = EXCLUDED.type, status_id = EXCLUDED.status_id, status_name = EXCLUDED.status_name,
 		  status_group = EXCLUDED.status_group, assignee = EXCLUDED.assignee, assignee_login = EXCLUDED.assignee_login,
 		  reporter = EXCLUDED.reporter, tester = EXCLUDED.tester, plan = EXCLUDED.plan, position = EXCLUDED.position,
 		  epic_key = EXCLUDED.epic_key, priority = EXCLUDED.priority, created = EXCLUDED.created,
 		  updated = EXCLUDED.updated, resolved = EXCLUDED.resolved, timespent_s = EXCLUDED.timespent_s,
-		  sprint_ids = EXCLUDED.sprint_ids, raw = EXCLUDED.raw, synced_at = now(), ` + flag + ` = true`
+		  sprint_ids = EXCLUDED.sprint_ids, raw = EXCLUDED.raw, synced_at = now()` + flagSet
 	batch := &pgx.Batch{}
 	for _, is := range issues {
 		ids := make([]int64, len(is.Sprints))
@@ -314,4 +266,79 @@ func upsertPeople(ctx context.Context, tx pgx.Tx, issues []Issue) (int, error) {
 		added += int(tag.RowsAffected())
 	}
 	return added, nil
+}
+
+type future struct {
+	project string
+	board   int64
+	sp      AgileSprint
+}
+
+// loadFutures — будущие спринты scrum-досок проектов (кандидаты в «следующий спринт»).
+// Ошибка по одному проекту не валит синк.
+func loadFutures(ctx context.Context, c *Client, log *slog.Logger, projects map[string]bool, st *SyncStats) []future {
+	var futures []future
+	for key := range projects {
+		boards, err := c.Boards(ctx, key)
+		if err != nil {
+			log.Warn("jira: доски проекта", "project", key, "err", err)
+			st.BoardErrors++
+			continue
+		}
+		for _, b := range boards {
+			if b.Type != "scrum" || b.ID == skipBoardID {
+				continue
+			}
+			sps, err := c.FutureSprints(ctx, b.ID)
+			if err != nil {
+				log.Warn("jira: будущие спринты доски", "project", key, "board", b.ID, "err", err)
+				st.BoardErrors++
+				continue
+			}
+			for _, s := range sps {
+				futures = append(futures, future{key, b.ID, s})
+			}
+		}
+	}
+	return futures
+}
+
+// writeSprints сохраняет спринты из поля «Спринт» задач и будущие спринты досок; возвращает их число.
+func writeSprints(ctx context.Context, tx pgx.Tx, issues []Issue, futures []future) (int, error) {
+	sprints := map[int64]Sprint{}
+	for _, is := range issues {
+		for _, s := range is.Sprints {
+			sprints[s.ID] = s
+		}
+	}
+	for _, f := range futures {
+		if _, ok := sprints[f.sp.ID]; !ok {
+			sprints[f.sp.ID] = Sprint{ID: f.sp.ID, State: "FUTURE", Name: f.sp.Name,
+				Start: optTime(f.sp.StartDate), End: optTime(f.sp.EndDate)}
+		}
+	}
+	for _, s := range sprints {
+		if _, err := tx.Exec(ctx, `INSERT INTO jira_sprints (id, name, state, start_date, end_date, complete_date)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, state = EXCLUDED.state,
+			  start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date, complete_date = EXCLUDED.complete_date`,
+			s.ID, s.Name, s.State, s.Start, s.End, s.Done); err != nil {
+			return 0, fmt.Errorf("спринт %d: %w", s.ID, err)
+		}
+	}
+	return len(sprints), nil
+}
+
+// writeFutures заменяет связи «проект → будущий спринт доски».
+func writeFutures(ctx context.Context, tx pgx.Tx, futures []future) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM jira_project_future_sprints`); err != nil {
+		return err
+	}
+	for _, f := range futures {
+		if _, err := tx.Exec(ctx, `INSERT INTO jira_project_future_sprints (project_key, board_id, sprint_id)
+			VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, f.project, f.board, f.sp.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

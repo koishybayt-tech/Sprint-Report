@@ -15,12 +15,14 @@ type Config struct {
 	HTTPAddr    string // HTTP_ADDR, по умолчанию :8080
 	JiraBaseURL string // JIRA_BASE_URL, по умолчанию https://jira.adata.kz
 	JiraPAT     string // JIRA_PAT — секрет, не логировать
-	// JIRA_SYNC_EVERY, по умолчанию 15m
+	// JIRA_SYNC_EVERY, по умолчанию 30m — инкрементальная синхронизация (только изменённые задачи)
 	JiraSyncEvery time.Duration
+	// JIRA_FULL_SYNC_AT, по умолчанию 03:00 (Asia/Almaty) — раз в сутки полная: проекты, тимлиды, справочник сотрудников
+	JiraFullSyncAt string
 
 	BitrixVacationURL string // BITRIX_VACATION_URL, по умолчанию https://bitrix.avh.kz/api/v1/vacation_api.php
 	BitrixAPIKey      string // BITRIX_API_KEY — секрет, идёт в query, в логах маскируется
-	// BITRIX_SYNC_EVERY, по умолчанию 2h
+	// BITRIX_SYNC_EVERY, по умолчанию 30m
 	BitrixSyncEvery time.Duration
 
 	TgBotToken string // TG_BOT_TOKEN — секрет, не логировать
@@ -41,10 +43,14 @@ func Load() (Config, error) {
 		return c, errors.New("DATABASE_URL не задан")
 	}
 	var err error
-	if c.JiraSyncEvery, err = duration("JIRA_SYNC_EVERY", "15m"); err != nil {
+	if c.JiraSyncEvery, err = duration("JIRA_SYNC_EVERY", "30m"); err != nil {
 		return c, err
 	}
-	if c.BitrixSyncEvery, err = duration("BITRIX_SYNC_EVERY", "2h"); err != nil {
+	c.JiraFullSyncAt = getenv("JIRA_FULL_SYNC_AT", "03:00")
+	if _, err := time.Parse("15:04", c.JiraFullSyncAt); err != nil {
+		return c, fmt.Errorf("JIRA_FULL_SYNC_AT: ожидается время ЧЧ:ММ, например 03:00")
+	}
+	if c.BitrixSyncEvery, err = duration("BITRIX_SYNC_EVERY", "30m"); err != nil {
 		return c, err
 	}
 	if v := strings.TrimSpace(os.Getenv("TG_CHAT_ID")); v != "" {

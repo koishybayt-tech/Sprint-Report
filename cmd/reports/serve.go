@@ -51,7 +51,8 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 	return nil
 }
 
-// runWorker синхронизирует Jira (каждые JIRA_SYNC_EVERY, 15m) и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 2h),
+// runWorker синхронизирует Jira (каждые JIRA_SYNC_EVERY, 30m: изменённые задачи; раз в сутки после JIRA_FULL_SYNC_AT — полная)
+// и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 30m),
 // оба раза — сразу при старте, и принимает сообщения группы ботом Telegram.
 // Без JIRA_PAT / BITRIX_API_KEY / TG_BOT_TOKEN+TG_CHAT_ID соответствующая часть выключена.
 func runWorker(ctx context.Context, log *slog.Logger) error {
@@ -89,7 +90,12 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 		if client == nil {
 			return
 		}
-		if err := syncJira(ctx, log, cfg, client, pool); err != nil && ctx.Err() == nil {
+		full, err := fullSyncDue(ctx, pool, cfg.JiraFullSyncAt)
+		if err != nil {
+			log.Error("worker: синхронизация Jira", "err", err)
+			return
+		}
+		if err := syncJira(ctx, log, cfg, client, pool, full); err != nil && ctx.Err() == nil {
 			log.Error("worker: синхронизация Jira", "err", err)
 		}
 	}
