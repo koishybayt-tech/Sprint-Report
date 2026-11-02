@@ -290,6 +290,7 @@ components:
         dn: { type: integer }
         bug: { type: integer }
         carry: { type: integer }
+        carry_open: { type: integer, description: "незакрытые задачи, бывшие минимум в 2 спринтах (колонка «Переходят из спринта в спринт»)" }
         added: { type: integer }
         unplanned: { type: integer }
         blocked: { type: integer }
@@ -318,6 +319,8 @@ components:
         current: { type: string }
         next_id: { type: integer, nullable: true }
         next_name: { type: string, nullable: true }
+        next_start: { type: string, format: date }
+        next_end: { type: string, format: date }
         next_total: { type: integer }
         carry: { type: integer }
         without_next: { type: array, items: { type: string } }

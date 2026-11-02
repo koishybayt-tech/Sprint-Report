@@ -18,6 +18,8 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthz", healthz(pool, log))
+		r.Get("/sprints", sprints(pool, log))
+		r.Get("/sprints/next", nextSprints(pool, log))
 	})
 	return r
 }
