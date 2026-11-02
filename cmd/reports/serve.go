@@ -14,6 +14,7 @@ import (
 	"github.com/adata/reports/internal/config"
 	"github.com/adata/reports/internal/db"
 	"github.com/adata/reports/internal/jira"
+	"github.com/adata/reports/internal/metrics"
 	"github.com/adata/reports/internal/tgbot"
 )
 
@@ -126,6 +127,26 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 	}
 	runJira()
 	runBitrix()
+	// Пятница, TG_SATURDAY_AT (20:30): кто отрабатывает в субботу — в группу «Adata Group», один раз на субботу.
+	// Не зависит от SYNC_HOURS: сообщения группы бот принимает круглосуточно, данные свежие.
+	if cfg.TgSaturdayAt != "off" && cfg.TgBotToken != "" && cfg.TgChatID != 0 {
+		go func() {
+			t := time.NewTicker(time.Minute)
+			defer t.Stop()
+			for {
+				if now := time.Now(); saturdayDue(now, cfg.TgSaturdayAt) {
+					if err := sendSaturday(ctx, cfg, pool, log, metrics.NextSaturday(now), false); err != nil && ctx.Err() == nil {
+						log.Error("worker: субботние отработки", "err", err)
+					}
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
 	// Личные Telegram-боты руководителей: привязка по /start <код> и кнопка «Игнорировать».
 	go notifier(cfg, pool, log).RunBots(ctx, 10*time.Second)
 	// История задач за год (карточка сотрудника) — отдельно: первая загрузка идёт ~20 минут и не должна держать остальное.

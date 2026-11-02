@@ -30,6 +30,8 @@ type Config struct {
 
 	TgBotToken string // TG_BOT_TOKEN — секрет, не логировать
 	TgChatID   int64  // TG_CHAT_ID — группа «Adata Group» (отрицательное число)
+	// TG_SATURDAY_AT, по умолчанию 20:30 (Алматы) — в пятницу в это время бот пишет в группу, кто отрабатывает в субботу; off — не писать
+	TgSaturdayAt string
 
 	// SECRETS_KEY — ключ шифрования секретов пользователей (токены личных Telegram-ботов руководителей), 16+ символов.
 	// Не задан — уведомления только в колокольчике сервиса.
@@ -46,6 +48,7 @@ func Load() (Config, error) {
 		BitrixAPIKey:      strings.TrimSpace(os.Getenv("BITRIX_API_KEY")),
 		TgBotToken:        strings.TrimSpace(os.Getenv("TG_BOT_TOKEN")),
 		SecretsKey:        strings.TrimSpace(os.Getenv("SECRETS_KEY")),
+		TgSaturdayAt:      getenv("TG_SATURDAY_AT", "20:30"),
 	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("DATABASE_URL не задан")
@@ -57,6 +60,11 @@ func Load() (Config, error) {
 	c.JiraFullSyncAt = getenv("JIRA_FULL_SYNC_AT", "08:30")
 	if _, err := time.Parse("15:04", c.JiraFullSyncAt); err != nil {
 		return c, fmt.Errorf("JIRA_FULL_SYNC_AT: ожидается время ЧЧ:ММ, например 08:30")
+	}
+	if c.TgSaturdayAt != "off" {
+		if _, err := time.Parse("15:04", c.TgSaturdayAt); err != nil {
+			return c, fmt.Errorf("TG_SATURDAY_AT: ожидается время ЧЧ:ММ, например 20:30, или off")
+		}
 	}
 	if c.SyncFrom, c.SyncTo, err = hoursRange(os.Getenv("SYNC_HOURS"), "08:30-20:00"); err != nil {
 		return c, err

@@ -22,6 +22,7 @@ const usage = `использование: reports <команда> [флаги]
   bitrix probe --id <табельный ID>  сырой ответ API отпусков (ключ замаскирован)
   users add --login --name --role  создать пользователя (первого admin; остальных — в «Настройках»)
   import-telegram --file <result.json | папка HTML>  история группы из экспорта Telegram Desktop
+  tg saturday [--send]  кто отрабатывает в субботу: без --send — показать текст, с --send — отправить в группу
   healthcheck  проверить /api/v1/healthz локального serve (для HEALTHCHECK)
 `
 
@@ -55,6 +56,8 @@ func main() {
 		err = runUsers(ctx, log, args)
 	case "import-telegram":
 		err = runImportTelegram(ctx, log, args)
+	case "tg":
+		err = runTg(ctx, log, args)
 	case "healthcheck":
 		err = runHealthcheck(ctx)
 	case "-h", "--help", "help":

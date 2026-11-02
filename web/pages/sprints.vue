@@ -290,39 +290,42 @@ const notes = computed(() => {
 <template>
   <div>
     <div class="stick">
-      <header>
-        <h1>Спринты Adata</h1>
-        <span class="meta">{{ updated ? `Данные Jira на ${updated}` : '' }}</span>
-      </header>
-      <div class="gbar snapbar">
-        <label class="gf"><span>Снепшот</span>
-          <select :value="snap" aria-label="Снепшот" @change="openSnap(($event.target as HTMLSelectElement).value)">
-            <option value="">Сейчас (живые данные)</option>
-            <option v-for="s in snaps || []" :key="s.taken_for" :value="s.taken_for">{{ dmy(s.taken_for) }}{{ s.note ? ' — ' + s.note : '' }}</option>
-          </select>
-        </label>
-        <template v-if="canSnap">
-          <template v-if="!snap">
-            <input v-model="snapNote" type="search" maxlength="200" placeholder="Комментарий к снепшоту" aria-label="Комментарий к снепшоту">
-            <button type="button" class="btn primary" :disabled="snapBusy || !data?.updated_at" @click="saveSnap">{{ snapBusy ? 'Сохраняю…' : 'Сохранить снепшот' }}</button>
+      <header class="sp-head">
+        <div class="sp-title">
+          <h1>Спринты Adata</h1>
+          <span class="meta">{{ updated ? `Данные Jira на ${updated}` : '' }}</span>
+        </div>
+        <div class="sp-ctl">
+          <label class="ctl" :class="{ on: lead }"><span>Руководитель</span>
+            <select v-model="lead" aria-label="Руководитель проекта">
+              <option value="">Все</option>
+              <option v-for="o in leads" :key="o.l" :value="o.l">{{ o.l }} ({{ o.n }})</option>
+            </select>
+          </label>
+          <span class="sep" aria-hidden="true" />
+          <label class="ctl" :class="{ on: snap }"><span>Снепшот</span>
+            <select :value="snap" aria-label="Снепшот" @change="openSnap(($event.target as HTMLSelectElement).value)">
+              <option value="">Сейчас</option>
+              <option v-for="s in snaps || []" :key="s.taken_for" :value="s.taken_for">{{ dmy(s.taken_for) }}{{ s.note ? ' — ' + s.note : '' }}</option>
+            </select>
+          </label>
+          <template v-if="canSnap">
+            <template v-if="!snap">
+              <input v-model="snapNote" class="sp-note" type="search" maxlength="200" placeholder="Комментарий" aria-label="Комментарий к снепшоту">
+              <button type="button" class="btn primary sm" :disabled="snapBusy || !data?.updated_at" title="Сохранить текущий отчёт как снепшот на сегодня" @click="saveSnap">{{ snapBusy ? 'Сохраняю…' : 'Сохранить снепшот' }}</button>
+            </template>
+            <button v-else type="button" class="btn danger sm" :disabled="snapBusy" @click="deleteSnap">Удалить снепшот</button>
           </template>
-          <button v-else type="button" class="btn danger" :disabled="snapBusy" @click="deleteSnap">Удалить снепшот</button>
-        </template>
-        <button v-if="!snap" type="button" class="btn" :disabled="pending" @click="refresh()">Обновить</button>
-        <span v-if="snapMsg" class="sub" role="status">{{ snapMsg }}</span>
-      </div>
+          <button v-if="!snap" type="button" class="btn sm icon" :disabled="pending" title="Обновить данные" aria-label="Обновить данные" @click="refresh()">⟳</button>
+        </div>
+      </header>
+      <p v-if="lead || snapMsg" class="sp-sub">
+        <span v-if="lead">В фильтре: {{ scopedP.length }} проектов · {{ sumOf(scopedP, 't') }} задач</span>
+        <span v-if="snapMsg" role="status">{{ snapMsg }}</span>
+      </p>
       <p v-if="snapInfo" class="snap-banner">Снепшот на {{ dmy(snapInfo.taken_for) }} — замороженная копия отчёта{{ updated ? `, данные Jira на ${updated}` : '' }}.
         Сохранил {{ snapInfo.created_by || 'администратор' }}{{ snapInfo.note ? ' · ' + snapInfo.note : '' }}.
         <button type="button" class="linkbtn" @click="openSnap('')">Вернуться к живым данным</button></p>
-      <div class="gbar">
-        <label class="gf"><span>Руководитель проекта</span>
-          <select v-model="lead">
-            <option value="">Все руководители</option>
-            <option v-for="o in leads" :key="o.l" :value="o.l">{{ o.l }} ({{ o.n }})</option>
-          </select>
-        </label>
-        <span v-if="lead" class="scope">В фильтре: {{ scopedP.length }} проектов · {{ sumOf(scopedP, 't') }} задач</span>
-      </div>
       <nav role="tablist">
         <button v-for="[id, title] in TABS" :key="id" role="tab" :aria-selected="tab === id" @click="tab = id">{{ title }}</button>
       </nav>
