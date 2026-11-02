@@ -127,17 +127,17 @@ func (s *Store) Ingest(ctx context.Context, m Message) (Outcome, error) {
 	}
 	defer tx.Rollback(ctx)
 
-	// То же сообщение уже пришло из другого источника (бот ↔ экспорт): нумерация разная, сверяем автора, время и текст.
-	if m.FromID != 0 {
-		var dup bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tg_messages WHERE chat_id = $1 AND source <> $2
-			AND from_id = $3 AND sent_at = $4 AND coalesce(text, '') = $5)`, m.ChatID, m.Source, m.FromID, m.SentAt, m.Text).Scan(&dup); err != nil {
-			return out, err
-		}
-		if dup {
-			out.Duplicate = true
-			return out, nil
-		}
+	// То же сообщение уже пришло из другого источника (бот ↔ экспорт): нумерация разная, сверяем время, текст
+	// и автора — если Telegram ID известен с обеих сторон (в HTML-экспорте его нет).
+	var dup bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tg_messages WHERE chat_id = $1 AND source <> $2
+		AND sent_at = $4 AND coalesce(text, '') = $5 AND (from_id IS NULL OR $3::bigint = 0 OR from_id = $3))`,
+		m.ChatID, m.Source, m.FromID, m.SentAt, m.Text).Scan(&dup); err != nil {
+		return out, err
+	}
+	if dup {
+		out.Duplicate = true
+		return out, nil
 	}
 
 	var oldText *string

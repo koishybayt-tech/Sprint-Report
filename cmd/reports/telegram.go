@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/adata/reports/internal/config"
@@ -16,11 +18,11 @@ import (
 	"github.com/adata/reports/internal/tgbot"
 )
 
-// runImportTelegram: reports import-telegram --file result.json — история группы из экспорта Telegram Desktop.
+// runImportTelegram: reports import-telegram --file result.json | <папка HTML-экспорта> — история группы из Telegram Desktop.
 // Идемпотентно: повторный импорт того же файла и сообщения, уже полученные ботом, не дублируются.
 func runImportTelegram(ctx context.Context, log *slog.Logger, args []string) error {
 	fs := flag.NewFlagSet("import-telegram", flag.ContinueOnError)
-	file := fs.String("file", "", "result.json из Telegram Desktop")
+	file := fs.String("file", "", "result.json (JSON-экспорт) или папка с messages.html (HTML-экспорт) Telegram Desktop")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -31,17 +33,35 @@ func runImportTelegram(ctx context.Context, log *slog.Logger, args []string) err
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(*file)
-	if err != nil {
+	var exp tgbot.Export
+	if st, err := os.Stat(*file); err != nil {
 		return err
-	}
-	exp, err := tgbot.ParseExport(f)
-	f.Close()
-	if err != nil {
-		return err
-	}
-	if cfg.TgChatID != 0 && exp.ChatID != cfg.TgChatID {
-		return fmt.Errorf("экспорт чата %q (id %d), а TG_CHAT_ID = %d — это другой чат?", exp.Name, exp.ChatID, cfg.TgChatID)
+	} else if st.IsDir() || strings.HasSuffix(strings.ToLower(*file), ".html") {
+		// HTML-экспорт (формат по умолчанию): id чата в нём нет — берём TG_CHAT_ID.
+		if cfg.TgChatID == 0 {
+			return errors.New("для HTML-экспорта нужен TG_CHAT_ID в .env")
+		}
+		dir := *file
+		if !st.IsDir() {
+			dir = filepath.Dir(*file)
+		}
+		if exp, err = tgbot.ParseExportDir(dir, cfg.TgChatID); err != nil {
+			return err
+		}
+		log.Info("import-telegram: HTML-экспорт", "chat", exp.Name, "chat_id", cfg.TgChatID, "messages", len(exp.Messages))
+	} else {
+		f, err := os.Open(*file)
+		if err != nil {
+			return err
+		}
+		exp, err = tgbot.ParseExport(f)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		if cfg.TgChatID != 0 && exp.ChatID != cfg.TgChatID {
+			return fmt.Errorf("экспорт чата %q (id %d), а TG_CHAT_ID = %d — это другой чат?", exp.Name, exp.ChatID, cfg.TgChatID)
+		}
 	}
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {

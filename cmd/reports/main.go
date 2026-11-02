@@ -21,7 +21,7 @@ const usage = `использование: reports <команда> [флаги]
   sync bitrix  синхронизировать отпуска из API отпусков Bitrix
   bitrix probe --id <табельный ID>  сырой ответ API отпусков (ключ замаскирован)
   users add --login --name --role  создать пользователя (первого admin; остальных — в «Настройках»)
-  import-telegram --file result.json  история группы из экспорта Telegram Desktop
+  import-telegram --file <result.json | папка HTML>  история группы из экспорта Telegram Desktop
   healthcheck  проверить /api/v1/healthz локального serve (для HEALTHCHECK)
 `
 

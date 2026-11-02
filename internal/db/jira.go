@@ -163,7 +163,7 @@ func TelegramEvents(ctx context.Context, pool *pgxpool.Pool, from time.Time) ([]
 	rows, err := pool.Query(ctx, `SELECT coalesce(e.jira_login, ''), e.full_name, a.day, a.kind, a.from_min, a.to_min, a.minutes
 		FROM attendance_events a JOIN employees e ON e.id = a.employee_id
 		WHERE a.source = 'telegram' AND NOT a.superseded AND a.kind IN ('sick','late','early','mid','day') AND a.day >= $1
-		ORDER BY e.full_name, a.day`, from)
+		ORDER BY e.full_name, a.day, a.from_min NULLS LAST`, from)
 	if err != nil {
 		return nil, err
 	}
