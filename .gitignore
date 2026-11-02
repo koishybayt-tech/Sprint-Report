@@ -1,0 +1,6 @@
+.env
+*.sql.gz*
+web/node_modules
+web/.output
+web/.nuxt
+/reports

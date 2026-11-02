@@ -1,0 +1,434 @@
+openapi: 3.0.3
+info:
+  title: Adata Reports API
+  version: 0.1.0
+  description: REST API сервиса отчётов. Генерация сервера — oapi-codegen (strict-server, chi), клиента — openapi-typescript.
+servers:
+  - url: /api/v1
+security:
+  - session: []
+tags:
+  - name: auth
+  - name: sprints
+  - name: people
+  - name: attendance
+  - name: employees
+  - name: snapshots
+  - name: pm
+  - name: admin
+  - name: telegram
+
+paths:
+  /auth/telegram:
+    post:
+      tags: [auth]
+      security: []
+      summary: Вход через Telegram Login Widget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TelegramAuth' }
+      responses:
+        '204': { description: Сессия установлена (Set-Cookie) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      responses: { '204': { description: OK } }
+  /me:
+    get:
+      tags: [auth]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /sprints:
+    get:
+      tags: [sprints]
+      summary: Активные спринты по проектам (вкладка «Статус спринтов»)
+      parameters:
+        - { name: lead, in: query, schema: { type: string }, description: фильтр по руководителю }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated_at: { type: string, format: date-time }
+                  projects: { type: array, items: { $ref: '#/components/schemas/ProjectSprint' } }
+  /sprints/{projectKey}/daily:
+    get:
+      tags: [sprints]
+      parameters:
+        - { name: projectKey, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/SprintDay' } } } } }
+  /sprints/next:
+    get:
+      tags: [sprints]
+      summary: Следующие спринты (+1 к номеру текущего)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/NextSprint' } } } } }
+
+  /people/load:
+    get:
+      tags: [people]
+      summary: Загрузка по людям (строки исполнитель×проект)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PersonProject' } } } } }
+  /people/need-tasks:
+    get:
+      tags: [people]
+      parameters:
+        - { name: max_left, in: query, schema: { type: integer, default: 2 } }
+        - { name: include_all, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/NeedTasks' } } } } }
+  /people/overloaded:
+    get:
+      tags: [people]
+      parameters:
+        - { name: min_backlog, in: query, schema: { type: integer, default: 8 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Overloaded' } } } } }
+  /people/absent-with-tasks:
+    get:
+      tags: [people]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+
+  /attendance:
+    get:
+      tags: [attendance]
+      summary: Сводка посещаемости за период (lead/hr/admin)
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AttendanceRow' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /attendance/events:
+    get:
+      tags: [attendance]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: employee_id, in: query, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AttendanceEvent' } } } } }
+    post:
+      tags: [attendance]
+      summary: Ручное событие (admin/hr)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AttendanceEventInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AttendanceEvent' } } } }
+  /attendance/events/{id}:
+    delete:
+      tags: [attendance]
+      summary: Отменить событие (помечает superseded)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses: { '204': { description: OK } }
+
+  /employees:
+    get:
+      tags: [employees]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Employee' } } } } }
+  /employees/{id}:
+    get:
+      tags: [employees]
+      summary: Карточка сотрудника (помесячно за год)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+        - { name: year, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/EmployeeCard' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /snapshots:
+    get:
+      tags: [snapshots]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/SnapshotMeta' } } } } }
+    post:
+      tags: [snapshots]
+      summary: Сделать снепшот (admin/lead)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [taken_for]
+              properties:
+                taken_for: { type: string, format: date }
+                history_end: { type: string, format: date }
+                note: { type: string }
+      responses:
+        '202': { description: Поставлено в очередь }
+  /snapshots/{date}:
+    get:
+      tags: [snapshots]
+      parameters:
+        - { name: date, in: path, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /pm-load:
+    get:
+      tags: [pm]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+  /pm-load.xlsx:
+    get:
+      tags: [pm]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Excel, content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
+
+  /admin/review:
+    get:
+      tags: [admin]
+      summary: Очередь ручной разметки и «Кто это?»
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ReviewItem' } } } } }
+  /admin/review/{chatId}/{messageId}:
+    put:
+      tags: [admin]
+      parameters:
+        - { name: chatId, in: path, required: true, schema: { type: integer, format: int64 } }
+        - { name: messageId, in: path, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                employee_id: { type: integer, format: int64 }
+                ignore: { type: boolean }
+                events: { type: array, items: { $ref: '#/components/schemas/AttendanceEventInput' } }
+      responses: { '204': { description: OK } }
+  /admin/sync/{source}:
+    post:
+      tags: [admin]
+      parameters:
+        - { name: source, in: path, required: true, schema: { type: string, enum: [jira, bitrix] } }
+        - { name: full, in: query, schema: { type: boolean } }
+      responses: { '202': { description: Запущено } }
+  /admin/sync-runs:
+    get:
+      tags: [admin]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+
+  /tg/webhook:
+    post:
+      tags: [telegram]
+      security: []
+      summary: Вебхук Telegram-бота (проверка X-Telegram-Bot-Api-Secret-Token)
+      parameters:
+        - { name: X-Telegram-Bot-Api-Secret-Token, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: adata_session }
+  responses:
+    Unauthorized: { description: Нет сессии }
+    Forbidden: { description: Недостаточно прав }
+  schemas:
+    TelegramAuth:
+      type: object
+      required: [id, auth_date, hash]
+      properties:
+        id: { type: integer, format: int64 }
+        first_name: { type: string }
+        last_name: { type: string }
+        username: { type: string }
+        photo_url: { type: string }
+        auth_date: { type: integer }
+        hash: { type: string }
+    Me:
+      type: object
+      properties:
+        employee_id: { type: integer, format: int64 }
+        full_name: { type: string }
+        role: { type: string, enum: [admin, lead, hr, employee] }
+    ProjectSprint:
+      type: object
+      properties:
+        key: { type: string }
+        name: { type: string }
+        lead: { type: string }
+        sprint: { type: string }
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        left_days: { type: integer }
+        total: { type: integer }
+        todo: { type: integer }
+        wk: { type: integer }
+        cr: { type: integer }
+        rw: { type: integer }
+        ts: { type: integer }
+        dn: { type: integer }
+        bug: { type: integer }
+        carry: { type: integer }
+        added: { type: integer }
+        unplanned: { type: integer }
+        blocked: { type: integer }
+        stale: { type: integer }
+        hours: { type: number }
+        people: { type: integer }
+        ready_deploy: { type: integer }
+        in_test: { type: integer }
+        test_by: { type: object, properties: { qa: { type: integer }, pm: { type: integer }, other: { type: integer } } }
+        ready_pct: { type: integer }
+        time_pct: { type: integer }
+        oldest_open: { type: object, properties: { key: { type: string }, age_days: { type: integer } } }
+    SprintDay:
+      type: object
+      properties:
+        day: { type: string, format: date }
+        todo_lead: { type: integer }
+        todo_unassigned: { type: integer }
+        todo_other: { type: integer }
+        in_progress: { type: integer }
+        done: { type: integer }
+    NextSprint:
+      type: object
+      properties:
+        project_key: { type: string }
+        current: { type: string }
+        next_id: { type: integer, nullable: true }
+        next_name: { type: string, nullable: true }
+        next_total: { type: integer }
+        carry: { type: integer }
+        without_next: { type: array, items: { type: string } }
+    PersonProject:
+      type: object
+      properties:
+        name: { type: string }
+        project_key: { type: string }
+        total: { type: integer }
+        todo: { type: integer }
+        wk: { type: integer }
+        cr: { type: integer }
+        rw: { type: integer }
+        ts: { type: integer }
+        dn: { type: integer }
+        bug: { type: integer }
+        todo_older_7d: { type: integer }
+        days_since_move: { type: integer, nullable: true }
+    NeedTasks:
+      type: object
+      properties:
+        name: { type: string }
+        position: { type: string }
+        left: { type: integer }
+        projects: { type: array, items: { type: string } }
+        donors: { type: array, items: { type: object, properties: { name: { type: string }, backlog: { type: integer }, keys: { type: array, items: { type: string } }, pm: { type: boolean } } } }
+    Overloaded:
+      type: object
+      properties:
+        name: { type: string }
+        backlog: { type: integer }
+        receivers: { type: array, items: { type: object, properties: { name: { type: string }, left: { type: integer } } } }
+    AttendanceRow:
+      type: object
+      properties:
+        employee_id: { type: integer, format: int64 }
+        name: { type: string }
+        late_count: { type: integer }
+        minutes_total: { type: integer }
+        later_than_declared: { type: integer }
+        half_day_plus: { type: integer }
+        unapproved: { type: integer }
+        sprint_end: { type: integer }
+        absence_days: { type: number }
+        open_tasks: { type: integer }
+        by_day: { type: array, items: { type: object, properties: { day: { type: string, format: date }, minutes: { type: integer }, kinds: { type: array, items: { type: string } } } } }
+    AttendanceEvent:
+      allOf:
+        - $ref: '#/components/schemas/AttendanceEventInput'
+        - type: object
+          properties:
+            id: { type: integer, format: int64 }
+            source: { type: string, enum: [telegram, bitrix, manual] }
+            message_link: { type: string }
+    AttendanceEventInput:
+      type: object
+      required: [employee_id, day, kind]
+      properties:
+        employee_id: { type: integer, format: int64 }
+        day: { type: string, format: date }
+        kind: { type: string, enum: [late, early, mid, day, sick, vac, unpaid, arrived] }
+        from_min: { type: integer }
+        to_min: { type: integer }
+        minutes: { type: integer }
+        reason: { type: string }
+        reason_cat: { type: string, enum: [study, health, family, personal, other] }
+        makeup_kind: { type: string }
+        makeup_text: { type: string }
+        approved_by: { type: array, items: { type: string } }
+    Employee:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        full_name: { type: string }
+        position: { type: string }
+        team_lead: { type: string }
+        project_lead: { type: string }
+        staff: { type: boolean }
+        jira_active: { type: boolean }
+        left_at: { type: string, format: date, nullable: true }
+    EmployeeCard:
+      type: object
+      properties:
+        employee: { $ref: '#/components/schemas/Employee' }
+        months:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string, example: '2026-10' }
+              created: { type: integer }
+              closed: { type: integer }
+              in_progress: { type: integer }
+              hours: { type: number }
+              late_count: { type: integer }
+              late_minutes: { type: integer }
+              absence_days: { type: number }
+    SnapshotMeta:
+      type: object
+      properties:
+        taken_for: { type: string, format: date }
+        history_end: { type: string, format: date }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+    ReviewItem:
+      type: object
+      properties:
+        chat_id: { type: integer, format: int64 }
+        message_id: { type: integer, format: int64 }
+        sent_at: { type: string, format: date-time }
+        from_name: { type: string }
+        text: { type: string }
+        reason: { type: string, enum: [manual, unknown_author] }
+        parse_result: { type: object, additionalProperties: true }

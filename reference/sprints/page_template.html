@@ -1,0 +1,830 @@
+<title>Спринты Adata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky tab rail over a single working column; summary strip first, sortable tables per report */
+:root{
+  --bg:#f3f5f7;--surface:#ffffff;--line:#dde2e8;--fg:#18222d;--muted:#5d6b7a;
+  --accent:#1f5e8c;--accent-soft:#e3eef6;
+  --ok:#2f7d4f;--ok-soft:#e2f2e8;--warn:#a86412;--warn-soft:#fbefdc;--bad:#b23a3a;--bad-soft:#f8e3e3;
+  --new:#9aa7b4;--ip:#3b82b8;--done:#3f9a63;
+  --s-bl:#c3ccd6;--s-wk:#3b82b8;--s-cr:#7a5fc0;--s-rw:#d0802a;--s-ts:#6fb3c9;--s-dn:#3f9a63;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11161c;--surface:#19212a;--line:#2a3541;--fg:#e4e9ee;--muted:#93a1b0;
+  --accent:#6fb0e0;--accent-soft:#1c3346;
+  --ok:#6cc48f;--ok-soft:#18332a;--warn:#e3a453;--warn-soft:#3a2b17;--bad:#ec7f7f;--bad-soft:#3d1f22;
+  --new:#5f6c79;--ip:#4f9bd4;--done:#4fae74;--s-bl:#465462;--s-wk:#4f9bd4;--s-cr:#9a84e0;--s-rw:#e3a453;--s-ts:#5aa7bf;--s-dn:#4fae74;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c;--surface:#19212a;--line:#2a3541;--fg:#e4e9ee;--muted:#93a1b0;
+  --accent:#6fb0e0;--accent-soft:#1c3346;
+  --ok:#6cc48f;--ok-soft:#18332a;--warn:#e3a453;--warn-soft:#3a2b17;--bad:#ec7f7f;--bad-soft:#3d1f22;
+  --new:#5f6c79;--ip:#4f9bd4;--done:#4fae74;--s-bl:#465462;--s-wk:#4f9bd4;--s-cr:#9a84e0;--s-rw:#e3a453;--s-ts:#5aa7bf;--s-dn:#4fae74;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body);padding:0 16px 48px}
+.wrap{max-width:none;margin:0}
+header{padding-block:24px 12px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+h1{font-size:24px;font-weight:700;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.meta{color:var(--muted);font-size:13px}
+.meta code{font-family:var(--f-mono);font-size:12px;background:var(--surface);border:1px solid var(--line);padding:1px 6px;border-radius:4px}
+nav{border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;padding-block:8px;scrollbar-width:thin}
+nav button{font:500 13px var(--f-body);color:var(--muted);background:none;border:1px solid transparent;border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+nav button:hover{color:var(--fg);background:var(--surface)}
+nav button[aria-selected="true"]{color:var(--accent);background:var(--accent-soft);border-color:transparent}
+button:focus-visible,select:focus-visible,input:focus-visible,th:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-block:20px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.kpi b{font:600 24px var(--f-mono);font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:12px}
+.kpi.bad b{color:var(--bad)}.kpi.warn b{color:var(--warn)}.kpi.ok b{color:var(--ok)}
+section{display:flex;flex-direction:column;gap:12px}
+h2{font-size:18px;margin:8px 0 0;font-weight:600}
+.lead{color:var(--muted);margin:0;max-width:140ch}
+.tools .ms-panel input[type=search]{flex:none}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools input,.tools select{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:0}
+.tools input{flex:1 1 220px;max-width:340px}
+.tbl{overflow:auto;max-height:calc(100vh - var(--stk,120px) - 12px);background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+td.wrap{white-space:normal;min-width:240px}
+td.n.wrap,th.n:last-child{text-align:left}
+th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none;position:sticky;top:0;z-index:2;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
+th[data-dir="asc"]::after{content:" ↑"}th[data-dir="desc"]::after{content:" ↓"}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--accent-soft)}
+.key{font-family:var(--f-mono);font-size:12px;color:var(--accent);text-decoration:none}
+.key:hover{text-decoration:underline}
+a.nl{color:var(--accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 35%,transparent);text-underline-offset:3px;padding:2px 4px;margin:-2px -4px;border-radius:4px}
+a.nl:hover{background:var(--accent-soft);text-decoration-color:var(--accent)}
+a.nl.hi{color:var(--bad)}a.nl.mid{color:var(--warn)}
+a.pl{font-family:var(--f-mono);font-size:12px;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin-right:2px;display:inline-block;margin-block:1px}
+a.pl:hover{background:var(--accent-soft);border-color:var(--accent)}
+.sub{color:var(--muted);font-size:12px}
+tr.xrow{cursor:pointer}tr.xrow:hover td{background:var(--surface)}tr.xrow.open td{border-bottom-color:transparent}.xc{display:inline-block;width:14px;color:var(--muted)}tr.xsub td{background:var(--bg);font-size:12px}tr.xsub td:first-child{padding-left:30px}
+.bar{display:flex;height:8px;width:140px;border-radius:4px;overflow:hidden;background:var(--line)}
+.bar i{display:block;height:100%}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.mute{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.hi{color:var(--bad);font-weight:600}.mid{color:var(--warn);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.note h3{margin:0;font-size:14px}
+.note p{margin:0;color:var(--muted);font-size:13px}
+.note b.big{font:600 20px var(--f-mono)}
+.stick{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg)}
+.gbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding-block:10px;border-bottom:1px solid var(--line)}
+.gf{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);white-space:nowrap}
+.tools .gf input{flex:none}
+.gf select,.gf input{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;max-width:260px}
+.gf input[type=number]{width:72px;font-family:var(--f-mono)}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
+.tools .chk input{flex:none;max-width:none}
+.chk{white-space:nowrap}
+.scope{font-size:12px;color:var(--muted);margin-left:auto}
+.flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}.flags:empty{display:none}
+.who{display:inline-block;font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin:1px 4px 1px 0;white-space:nowrap}
+.grp{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;padding-block:2px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin:12px 0 24px}
+.dcard{font:inherit;color:inherit;text-align:left;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.dcard:hover,.dcard:focus-visible{border-color:var(--accent)}
+.dcard h3{margin:0;font-size:13px;font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.dcard h3 i{font-style:normal;color:var(--muted);font-weight:400}
+.dm{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:12px}
+.dm div{display:flex;flex-direction:column;min-width:0}
+.dm b{font:600 22px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dm span{color:var(--muted);font-size:12px}
+.dm .bad b{color:var(--bad)}.dm .warn b{color:var(--warn)}.dm .ok b{color:var(--ok)}
+.dh{margin:4px 0 4px;font-size:15px}
+.lbtn{font:inherit;font-weight:600;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.dlpr{display:flex;flex-wrap:wrap;gap:3px;width:150px}.dlpr .pl{display:inline-block;margin:0}
+.nm{display:flex;flex-wrap:wrap;gap:4px;max-width:260px}
+.nm a.pill{text-decoration:none;font-family:var(--f-body,inherit);font-weight:500;white-space:nowrap}
+.dtops{margin-top:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.dtop{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.dtop h3{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.dtop h3 button{font:inherit;font-size:12px;font-weight:400;color:var(--accent);background:none;border:0;cursor:pointer;padding:0}
+.dtop table{width:100%}
+button.kpi{font:inherit;color:inherit;text-align:left;cursor:pointer}
+button.kpi:hover{border-color:var(--accent)}
+td.empty{padding:20px 10px}
+.tt{position:fixed;z-index:50;max-width:min(380px,calc(100vw - 16px));background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 30px rgb(0 0 0/.22);padding:12px 14px;font-size:12.5px;line-height:1.45}
+.tt a.tl-a{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:2px;padding:0 2px;border-radius:3px}
+.tt a.tl-a:hover{background:var(--accent-soft)}
+.tt-f{margin-top:8px;font-size:11px;color:var(--muted)}
+.tt p{margin:4px 0 8px}
+.tt-h{font-weight:600;font-size:13px}
+.tt-s{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ok);font-weight:600;margin-top:6px}
+.tt-s.bad{color:var(--bad)}
+.tt ul{margin:2px 0 0;padding-left:16px}
+.tt li{margin:3px 0}
+.tt li span{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.has-tip{cursor:help}
+.plist{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.pc{font-family:var(--f-mono);font-size:12px;min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:var(--fg);color:var(--bg);padding:0 6px;margin-right:2px}
+a.wl{text-decoration:none;color:var(--fg);margin:0}
+a.wl b{font-family:var(--f-mono);color:var(--accent);margin-left:2px}
+a.wl:hover{border-color:var(--accent);background:var(--accent-soft)}
+a.pl b{color:var(--fg);margin-left:3px}
+a.wl.same{border-color:var(--ok);background:var(--ok-soft)}
+.pmtag{font-style:normal;font-size:10px;font-weight:700;color:var(--accent);margin-right:4px;letter-spacing:.03em}
+.ms{position:relative}
+.ms-panel input[type=search]{font:13px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 10px;width:100%}
+.ms summary{list-style:none;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 30px 6px 10px;font-size:13px;position:relative;white-space:nowrap}
+.ms summary::-webkit-details-marker{display:none}
+.ms summary::after{content:"▾";position:absolute;right:10px;color:var(--muted)}
+.ms[open] summary{border-color:var(--accent)}
+.ms-panel{position:absolute;z-index:10;top:calc(100% + 4px);left:0;width:min(360px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgb(0 0 0/.15);padding:8px;display:flex;flex-direction:column;gap:6px}
+.tools .ms-panel input[type=search]{width:100%;max-width:none;flex:none}
+.ms-list{max-height:320px;overflow-y:auto;display:flex;flex-direction:column}
+.ms-item{display:grid;grid-template-columns:auto 64px 1fr auto;gap:8px;align-items:center;padding:5px 6px;border-radius:4px;cursor:pointer;font-size:13px}
+.ms-item:hover{background:var(--accent-soft)}
+.ms-item b{font-family:var(--f-mono);font-size:12px;font-weight:500}
+.ms-item span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ms-item em{font-style:normal;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips:empty{display:none}
+.chip{font:500 12px var(--f-mono);color:var(--accent);background:var(--accent-soft);border:1px solid transparent;border-radius:999px;padding:3px 10px;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.chip.clear{font-family:var(--f-body);color:var(--muted);background:none;border-color:var(--line)}
+.psum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.psum b{color:var(--fg);font-family:var(--f-mono);font-weight:600}
+footer{margin-top:28px;color:var(--muted);font-size:12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.xlink{font:500 13px var(--f-body);color:var(--accent);text-decoration:none;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 10px;white-space:nowrap}.xlink:hover{background:var(--accent-soft);border-color:var(--accent)}
+.rf{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rfb{cursor:pointer;font:500 13px var(--f-body)}
+.rfb[disabled]{opacity:.55;cursor:default}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Спринты Adata</h1>
+  <div class="meta">Срез Jira на <b id="snap"></b> · все задачи в открытых спринтах · JQL <code>cf[10104] in openSprints()</code> · <a class="xlink" href="https://claude.ai/artifact/9wLovHH515cw2TxJNa95xE" target="_blank" rel="noopener" title="Опоздания и пропуски по Telegram. Доступ только у руководителей">Посещаемость →</a> · <a class="xlink" href="https://claude.ai/artifact/SwcyQGvBAyrE7yLfh4QZuy" target="_blank" rel="noopener" title="Динамика сотрудника: задачи и посещаемость за 2026, Excel. Доступ только у руководителей">Сотрудник →</a></div>
+  <div class="rf" id="rf" hidden><button type="button" class="xlink rfb" id="rf-btn">Обновить сейчас</button><span class="sub" id="rf-st" aria-live="polite"></span></div>
+</header>
+
+<div class="stick">
+<div class="gbar" id="gbar">
+  <label class="gf"><span>Руководитель проекта</span><select id="g-lead"></select></label>
+  <details class="ms" id="ms"><summary><span class="sub">Проекты:</span> <b id="ms-label">Все проекты</b></summary>
+    <div class="ms-panel"><input id="ms-q" type="search" placeholder="Найти проект"><div class="ms-list" id="ms-list"></div></div>
+  </details>
+  <div class="chips" id="chips"></div>
+  <span class="scope" id="scope"></span>
+</div>
+
+<nav role="tablist" id="tabs"></nav>
+</div>
+
+<div class="kpis" id="kpis"></div>
+
+<section id="dash" data-title="Дэшборды">
+  <h2>Дэшборды</h2>
+  <h3 class="dh">Сводка по руководителям проектов</h3>
+  <p class="lead">Одна строка — один руководитель: его проекты, готовность спринтов против прошедшего времени, риски и люди, на которых стоит обратить внимание. Нажмите на имя руководителя, чтобы отфильтровать весь отчёт по его проектам.</p>
+  <div class="tbl"><table id="tb-dlead"></table></div>
+  <div class="dtops">
+    <div class="dtop"><h3><span>Кому критически нужны задачи</span><button data-go="need">все →</button></h3><p class="sub" id="dn-sub" style="margin:0 0 6px"></p><div class="tbl"><table id="tb-dneed"></table></div></div>
+    <div class="dtop"><h3><span>Кто отсутствует (сейчас и в ближайшие 14 дней)</span><button data-go="abs">все →</button></h3><p class="sub" id="da-sub" style="margin:0 0 6px"></p><div class="tbl"><table id="tb-dabs"></table></div></div>
+  </div>
+</section>
+
+<section id="sprint" data-title="Статус спринтов">
+  <h2>Статус спринтов</h2>
+  <p class="lead">Прогресс каждого активного спринта по статусам. Спринт, чья дата окончания прошла, но он не закрыт в Jira, отмечен «Не закрыт».</p>
+  <div class="legend"><span><i style="background:var(--s-dn)"></i>Готово</span><span><i style="background:var(--s-ts)"></i>Тестируется</span><span><i style="background:var(--s-cr)"></i>Код ревью</span><span><i style="background:var(--s-rw)"></i>Реворк</span><span><i style="background:var(--s-wk)"></i>В работе</span><span><i style="background:var(--s-bl)"></i>Бэклог</span></div>
+  <div class="tbl"><table id="tb-sprint"></table></div>
+</section>
+
+<section id="people" data-title="Загрузка ресурсов" hidden>
+  <h2>Загрузка ресурсов</h2>
+  <p class="lead">Задачи исполнителей в выбранных проектах. «Тестируется» — все статусы, кроме Сделать, В работе, Code review, Need Rework и Готово. Нажмите на число или код проекта, чтобы открыть эти задачи в Jira.</p>
+  <div class="tools">
+    <select id="p-flag" aria-label="Показать"><option value="">Все сотрудники</option><option value="need">Нужны задачи</option><option value="over">Перегружены бэклогом</option><option value="switch">Переключаются между руководителями</option><option value="tl">Тимлиды</option><option value="abs">Отпуск / больничный</option></select>
+    <select id="f-pos" aria-label="Роль"></select>
+    <input id="q-people" type="search" placeholder="Поиск по имени">
+  </div>
+  <div class="psum" id="people-sum"></div>
+  <div class="tbl"><table id="tb-people"></table></div>
+</section>
+
+<section id="lres" data-title="Ресурсы по руководителям" hidden>
+  <h2>Ресурсы по руководителям</h2>
+  <p class="lead">Какую долю всех сотрудников занимает каждый руководитель в текущих спринтах. Если человек работает в проектах нескольких руководителей, он делится между ними пропорционально числу своих задач в спринте (например, 6 задач у одного и 2 у другого — это 0,75 и 0,25 человека). Уволенные и задачи без исполнителя не учитываются. Нажмите на строку руководителя, чтобы увидеть, сколько ресурсов занимает каждый его проект.</p>
+  <div class="psum" id="lres-sum"></div>
+  <div class="tbl"><table id="tb-lres"></table></div>
+</section>
+
+<section id="abs" data-title="Отсутствия" hidden>
+  <h2>Отпуска, больничные и отгулы: задачи, которые никто не закроет</h2>
+  <p class="lead">Сотрудник в отпуске или на больничном, а на нём висят задачи спринта в бэклоге, в работе или в реворке. Они не закроются, пока его нет, и план спринта не выполнится, если их не переназначить. Отпуска (трудовой и без содержания) — из Bitrix, больничные и «отпросился» (от 2 часов за день) — из Telegram-группы «Adata Group». Метка «конец спринта» — отсутствие попадает на последние 2 дня спринта, где у сотрудника есть незакрытые задачи. <span id="abs-src"></span></p>
+  <div class="tools">
+    <label class="gf"><span>Показывать отсутствия на ближайшие, дн.</span><input id="a-h" type="number" min="0" max="60" value="14"></label>
+    <label class="chk"><input type="checkbox" id="a-risk" checked> Только с задачами</label>
+  </div>
+  <div class="psum" id="abs-sum"></div>
+  <div class="tbl"><table id="tb-abs"></table></div>
+</section>
+
+<section id="need" data-title="Нужны задачи" hidden>
+  <h2>Сотрудники, у которых заканчиваются задачи</h2>
+  <p class="lead">Считается всё, что сотрудник ещё может взять в работу во всех проектах: Бэклог + В работе + Реворк. Задачи на ревью и в тестировании не считаются — они ждут других. Тимлиду этих людей нужно делегировать задачи. В колонке «У кого взять задачи» — коллеги по тем же проектам с бэклогом больше порога: только с той же ролью (фронт у фронта, бэк у бэка и т.д.) и ПМ, задачи которых может взять любой. ПМ — сотрудник с ролью Project Manager или руководитель проекта (учитывается бэклог только в его собственных проектах). Если роль сотрудника в Jira не указана, показываются только ПМ. Число — их бэклог в общих проектах, нажмите, чтобы открыть эти задачи.</p>
+  <div class="tools">
+    <label class="gf"><span>Осталось задач не больше</span><input id="n-th" type="number" min="0" max="20" value="2"></label>
+    <label class="gf"><span>Брать у тех, у кого в бэклоге больше</span><input id="d-th" type="number" min="0" max="50" value="2"></label>
+    <label class="chk"><input type="checkbox" id="n-all"> Показывать PM, QA и тимлидов</label>
+  </div>
+  <div class="psum" id="need-sum"></div>
+  <div class="tbl"><table id="tb-need"></table></div>
+</section>
+
+<section id="over" data-title="Перегружены" hidden>
+  <h2>Сотрудники с перегрузом в бэклоге</h2>
+  <p class="lead">У кого в статусе «Сделать» скопилось слишком много задач спринта по всем проектам. Эти задачи стоит раздать. В колонке «Кому отдать» — сотрудники из тех же проектов, у которых заканчиваются задачи (по правилам вкладки «Нужны задачи»), с той же ролью. Если перегружен ПМ или руководитель проекта, предлагаются все, у кого заканчиваются задачи, — задачу ПМ может взять любой.</p>
+  <div class="tools">
+    <label class="gf"><span>В бэклоге не меньше</span><input id="o-th" type="number" min="1" max="100" value="8"></label>
+    <label class="chk"><input type="checkbox" id="o-all"> Показывать ПМ и тимлидов</label>
+  </div>
+  <div class="psum" id="over-sum"></div>
+  <div class="tbl"><table id="tb-over"></table></div>
+</section>
+
+<section id="switch" data-title="Переключаются между проектами" hidden>
+  <h2>Сотрудники, которые тормозят проект</h2>
+  <p class="lead">Сотрудник работает над задачами одного руководителя, а задачи другого руководителя у него лежат в бэклоге и не двигаются (нет ни одной задачи в работе, ревью или реворке). Из-за этого проект второго руководителя стоит.</p>
+  <div class="tools">
+    <label class="gf"><span>Застряло в бэклоге не меньше</span><input id="s-th" type="number" min="1" max="50" value="1"></label>
+  </div>
+  <div class="psum" id="switch-sum"></div>
+  <div class="tbl"><table id="tb-switch"></table></div>
+</section>
+
+<section id="tl" data-title="Тимлиды и бэклог" hidden>
+  <h2>Тимлиды, которые держат бэклог на себе</h2>
+  <p class="lead">Тимлиды из группы <code>adata-team-leads</code>: сколько задач спринта в статусе «Сделать» назначено на них самих. Такие задачи не распределены — команда не видит весь объём работы. Рядом — сколько сотрудников в проектах тимлида остаются без задач.</p>
+  <div class="tools">
+    <label class="gf"><span>Держит в бэклоге не меньше</span><input id="t-th" type="number" min="1" max="50" value="3"></label>
+    <label class="chk"><input type="checkbox" id="t-pl"> Добавить руководителей проектов не из группы</label>
+  </div>
+  <div class="psum" id="tl-sum"></div>
+  <div class="tbl"><table id="tb-tl"></table></div>
+</section>
+
+<section id="qa" data-title="Загрузка QA" hidden>
+  <h2>Загрузка QA</h2>
+  <p class="lead">По полю «Тестировщик». У Алмабаева Асанәлі задачи почти во всех проектах — похоже, это значение поля по умолчанию, а не реальное назначение.</p>
+  <div class="tbl"><table id="tb-qa"></table></div>
+</section>
+
+<section id="block" data-title="Узкие места" hidden>
+  <h2>Узкие места</h2>
+  <p class="lead">Незакрытые задачи в статусах Blocked, Need Rework, «Требует уточнения», а также любые задачи без обновлений больше 30 дней.</p>
+  <div class="tools"><input id="q-block" type="search" placeholder="Поиск по ключу, тексту или исполнителю"><select id="f-st" aria-label="Статус"></select></div>
+  <div class="tbl"><table id="tb-block"></table></div>
+</section>
+
+<section id="stab" data-title="Стабильность" hidden>
+  <h2>Стабильность спринтов</h2>
+  <p class="lead">Сколько задач перенесено из прошлых спринтов, сколько создано после старта текущего и сколько помечено внеплановыми.</p>
+  <div class="tbl"><table id="tb-stab"></table></div>
+</section>
+
+<section id="qual" data-title="Качество" hidden>
+  <h2>Качество</h2>
+  <p class="lead">Доля задач типа «Ошибка» в спринте и задачи, вернувшиеся на доработку.</p>
+  <div class="tbl"><table id="tb-qual"></table></div>
+</section>
+
+<section id="rel" data-title="Готовность к релизу" hidden>
+  <h2>Готовность к релизу</h2>
+  <p class="lead">Процент готовности спринта (доля задач в «Готово») и задачи на финише: Code review, Test, Ready for deploy / In Staging. Задачи в Test разделены по полю «Тестировщик»: QA (и пустое поле), PM, тимлид / остальные.</p>
+  <div class="tbl"><table id="tb-rel"></table></div>
+</section>
+
+<section id="next" data-title="Следующий спринт" hidden>
+  <h2>Следующий спринт</h2>
+  <p class="lead">Готов ли следующий спринт к старту. Следующий ищется по названию текущего с номером +1 (например, «Адата Комплаенс 2026-19» → «2026-20»). «Перейдёт» — незакрытые задачи текущего спринта. «Без задач в следующем» — кто работает в текущем спринте проекта, но в следующем у него задач нет. <span id="ns-src"></span></p>
+  <div class="psum" id="ns-sum"></div>
+  <div class="tbl"><table id="tb-next"></table></div>
+</section>
+
+<section id="dq" data-title="Качество данных" hidden>
+  <h2>Качество данных в Jira</h2>
+  <p class="lead">Чего не хватает, чтобы строить отчёты по трудозатратам и срокам.</p>
+  <div class="notes" id="notes"></div>
+</section>
+
+<footer>Данные выгружены из jira.adata.kz через REST API. Ссылки открывают актуальные задачи в Jira. Чтобы обновить срез, попросите Claude выгрузить данные заново.</footer>
+</div>
+
+<script>
+/*DATA-START*/
+/*DATA*/
+/*DATA-END*/
+const JB="https://jira.adata.kz/";
+const TODAY=new Date(SNAP+"T12:00:00");
+const $=id=>document.getElementById(id);
+const fmt=d=>d?d.slice(8,10)+"."+d.slice(5,7):"—";
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const days=d=>Math.round((new Date(d+"T12:00:00")-TODAY)/864e5);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const lvl=(v,w,b)=>v>=b?"hi":v>=w?"mid":"";
+$("snap").textContent=fmt(SNAP)+"."+SNAP.slice(0,4)+(typeof UPDATED!="undefined"?" "+UPDATED.slice(11,16):"");
+
+// ---------- projects ----------
+const PR=PJ.map(p=>({k:p[0],n:p[1],lead:p[2],sp:p[3],st:p[4],en:p[5],t:p[6],bl:p[7],wk:p[8],cr:p[9],rw:p[10],ts:p[11],dn:p[12],bug:p[13],carry:p[14],add:p[15],unpl:p[16],blk:p[17],stale:p[18],h:p[19],ppl:p[20],rdy:p[21],tst:p[22]}));
+PR.forEach(p=>{const x=(typeof PX!='undefined'&&PX[p.k])||[null,0,0];p.oKey=x[0];p.oAge=x[1];p.carryOpen=x[2];p.left=days(p.en);p.done=pct(p.dn,p.t);const len=Math.max(1,(new Date(p.en)-new Date(p.st))/864e5);p.time=Math.round(Math.min(1,Math.max(0,(TODAY-new Date(p.st))/864e5/len))*100)});
+const PBY=Object.fromEntries(PR.map(p=>[p.k,p]));
+const LEAD=k=>(PBY[k]||{}).lead||"—";
+const pname=k=>(PBY[k]||{}).n||k;
+
+// ---------- global scope ----------
+const SEL=new Set();let GLEAD="";
+const leads=[...new Set(PR.map(p=>p.lead))].sort((a,b)=>a.localeCompare(b,"ru"));
+const leadProj=l=>PR.filter(p=>p.lead==l).map(p=>p.k);
+$("g-lead").innerHTML=`<option value="">Все руководители</option>`+leads.map(l=>`<option value="${esc(l)}">${esc(l)} (${leadProj(l).length})</option>`).join("");
+const avail=()=>(GLEAD?PR.filter(p=>p.lead==GLEAD):PR).map(p=>p.k).sort();
+function scopeKeys(){const a=avail();const s=[...SEL].filter(k=>a.includes(k));return s.length?s:a}
+let SCOPE=new Set(PR.map(p=>p.k));
+const inS=k=>SCOPE.has(k);
+const allScope=()=>SCOPE.size==PR.length;
+function buildMs(){
+  const a=avail();[...SEL].forEach(k=>{if(!a.includes(k))SEL.delete(k)});
+  $("ms-list").innerHTML=a.map(k=>`<label class="ms-item"><input type="checkbox" id="pf-${k}" value="${k}" ${SEL.has(k)?"checked":""}><b>${k}</b><span>${esc(pname(k))}</span><em>${PBY[k].t}</em></label>`).join("");
+}
+function applyScope(){
+  SCOPE=new Set(scopeKeys());
+  $("ms-label").textContent=SEL.size?(SEL.size<=3?[...SEL].join(", "):`выбрано ${SEL.size}`):(GLEAD?`все проекты руководителя`:"Все проекты");
+  $("chips").innerHTML=[...SEL].map(k=>`<button class="chip" data-k="${k}" title="Убрать">${k} <span aria-hidden="true">×</span></button>`).join("")+((SEL.size||GLEAD)?`<button class="chip clear" data-k="*">Сбросить фильтр</button>`:"");
+  const t=PR.filter(p=>inS(p.k)).reduce((a,p)=>a+p.t,0);
+  $("scope").textContent=allScope()?"":`В фильтре: ${SCOPE.size} проектов · ${t} задач`;
+  renderAll();
+}
+$("g-lead").onchange=e=>{GLEAD=e.target.value;SEL.clear();buildMs();applyScope()};
+$("ms-list").onchange=e=>{const i=e.target;i.checked?SEL.add(i.value):SEL.delete(i.value);applyScope()};
+$("chips").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;if(b.dataset.k=="*"){SEL.clear();GLEAD="";$("g-lead").value="";buildMs()}else{SEL.delete(b.dataset.k);$("pf-"+b.dataset.k)&&($("pf-"+b.dataset.k).checked=false)}applyScope()};
+$("ms-q").oninput=e=>{const q=e.target.value.toLowerCase();$("ms-list").querySelectorAll(".ms-item").forEach(l=>l.hidden=!!q&&!l.textContent.toLowerCase().includes(q))};
+document.addEventListener("click",e=>{const d=$("ms");if(d.open&&!d.contains(e.target))d.open=false});
+
+// ---------- Jira links ----------
+const BASE="cf[10104] in openSprints()";
+const who=(n,f="assignee")=>n=="— не назначен"?`${f} is EMPTY`:`${f} = "${U[n]||n}"`;
+const projQ=keys=>{keys=keys||[...SCOPE];return keys.length==PR.length&&allScope()?"":`project in (${keys.map(k=>'"'+k+'"').join(", ")})`};
+const jq=parts=>JB+"issues/?jql="+encodeURIComponent([BASE,...parts.filter(Boolean)].join(" AND ")+" ORDER BY status ASC, updated DESC");
+const nl=(v,url,cls="")=>v?`<a class="nl ${cls}" href="${url}" target="_blank" rel="noopener" title="Открыть в Jira">${v}</a>`:`<span class="sub">0</span>`;
+const pl=(k,url)=>`<a class="pl" href="${url}" target="_blank" rel="noopener" title="${esc(pname(k))} · ${esc(LEAD(k))}">${k}</a>`;
+const ST={bl:"status = 10100",wk:"status = 10011",cr:"status = 10008",rw:"status = 10000",dn:"status = 10001",ts:"status not in (10100, 10011, 10008, 10000, 10001)",open:"status != 10001"};
+
+// ---------- people model (full, all projects) ----------
+const PEOPLE={};
+AX.forEach(r=>{const p=PEOPLE[r[0]]=PEOPLE[r[0]]||{n:r[0],rows:[]};p.rows.push({k:r[1],t:r[2],bl:r[3],wk:r[4],cr:r[5],rw:r[6],ts:r[7],dn:r[8],bug:r[9],blStale:r[10],act:r[11],any:r[12],blAge:r[13],blUpd:r[14]})});
+const isTL=n=>TL.includes(n);
+const roleOf=n=>POS[n]||"—";
+const sumRows=(rows,f)=>rows.reduce((a,r)=>a+r[f],0);
+// need: queue across ALL projects
+function needInfo(n){const rows=PEOPLE[n].rows;const q=sumRows(rows,"bl")+sumRows(rows,"wk")+sumRows(rows,"rw");return q}
+// switch: group by project lead
+function switchInfo(n){
+  const G={};PEOPLE[n].rows.forEach(r=>{const l=LEAD(r.k);const g=G[l]=G[l]||{lead:l,keys:[],bl:0,act:0,wk:0,cr:0,rw:0,blStale:0,blAge:0,blUpd:-1,stalledKeys:[]};g.keys.push(r.k);g.bl+=r.bl;g.wk+=r.wk;g.cr+=r.cr;g.rw+=r.rw;g.act+=r.wk+r.cr+r.rw;g.blStale+=r.blStale;g.blAge=Math.max(g.blAge,r.blAge);if(r.bl&&r.blUpd>=0)g.blUpd=g.blUpd<0?r.blUpd:Math.min(g.blUpd,r.blUpd)});
+  const gs=Object.values(G);const active=gs.filter(g=>g.act>0),stalled=gs.filter(g=>g.bl>0&&g.act==0&&g.lead!=n);
+  stalled.forEach(g=>g.stalledKeys=PEOPLE[n].rows.filter(r=>LEAD(r.k)==g.lead&&r.bl>0).map(r=>r.k));
+  return {active,stalled,flag:active.length>0&&stalled.length>0};
+}
+
+// ---------- absences (Bitrix vacations + Telegram sick leave) ----------
+const AB=(typeof ABS!="undefined"?ABS:[]).map(a=>({n:a[0],ty:a[1],fr:a[2],to:a[3]||null,src:a[4],note:a[5]||""}));
+const ABT={vac:"Отпуск",bs:"Отпуск б/с",sick:"Больничный",off:"Отпросился"};
+const addD=(d,k)=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+k);return x.toISOString().slice(0,10)};
+const absNow=n=>AB.find(a=>a.n==n&&a.fr<=SNAP&&(!a.to||a.to>=SNAP));
+const absSoon=(n,h)=>AB.filter(a=>a.n==n&&a.fr>SNAP&&a.fr<=addD(SNAP,h)).sort((x,y)=>x.fr<y.fr?-1:1)[0];
+const absTxt=a=>a.ty=="off"?(a.fr>SNAP?"отпросился на "+fmt(a.fr):a.fr==SNAP?"отпросился сегодня":"отпросился "+fmt(a.fr)):a.fr>SNAP?`${ABT[a.ty].toLowerCase()} с ${fmt(a.fr)}`:ABT[a.ty]+(a.to?` до ${fmt(a.to)}`:" · выход не указан");
+
+// ---------- generic sortable table ----------
+const TABLES={};
+function table(id,cols,rows,init,ex){
+  const el=$(id);let sk=init?init[0]:null,dir=init?init[1]:"desc";const OPEN=new Set();
+  function draw(){
+    const r=[...rows()];
+    if(sk!=null){const c=cols[sk];const v=c.sort||c.v;r.sort((a,b)=>{const x=v(a),y=v(b);return (typeof x=="string"?x.localeCompare(y,"ru"):x-y)*(dir=="asc"?1:-1)})}
+    el.innerHTML="<thead><tr>"+cols.map((c,i)=>`<th tabindex="0" class="${c.num&&!c.cls?"n":""}" ${i===sk?`data-dir="${dir}"`:""} data-i="${i}" title="${c.tip||""}">${c.h}</th>`).join("")+"</tr></thead><tbody>"+
+      (r.length?r.map(x=>{const k=ex?ex.key(x):null,o=ex&&OPEN.has(k);return (ex?`<tr class="xrow${o?" open":""}" data-k="${esc(k)}" tabindex="0" title="Нажмите, чтобы ${o?"свернуть":"раскрыть"}">`:"<tr>")+cols.map((c,ci)=>`<td class="${c.num?"n":""} ${c.cls||""}">${ex&&ci==0?`<span class="xc">${o?"▾":"▸"}</span>`:""}${c.f?c.f(x):esc(c.v(x))}</td>`).join("")+"</tr>"+(o?ex.sub(x).map(y=>`<tr class="xsub">`+cols.map(c=>`<td class="${c.num?"n":""} ${c.cls||""}">${(c.sf||c.f||(z=>esc(c.v(z))))(y)}</td>`).join("")+"</tr>").join(""):"")}).join(""):`<tr><td colspan="${cols.length}" class="sub empty">Никого нет по этому фильтру</td></tr>`)+"</tbody>";
+    if(ex)el.querySelectorAll("tr.xrow").forEach(tr=>{const t=()=>{const k=tr.dataset.k;OPEN.has(k)?OPEN.delete(k):OPEN.add(k);draw()};tr.onclick=e=>{if(e.target.closest("a"))return;t()};tr.onkeydown=e=>{if(e.key=="Enter"&&!e.target.closest("a")){e.preventDefault();t()}}});
+    el.querySelectorAll("th").forEach(th=>{const go=()=>{const i=+th.dataset.i;if(sk===i)dir=dir=="asc"?"desc":"asc";else{sk=i;dir=cols[i].num?"desc":"asc"}draw()};th.onclick=go;th.onkeydown=e=>{if(e.key=="Enter"||e.key==" "){e.preventDefault();go()}}});
+  }
+  TABLES[id]=draw;return draw;
+}
+const projCell=p=>`<b>${esc(p.k)}</b> <span class="sub">${esc(p.n)}</span>`;
+const sumOf=(arr,f)=>arr.reduce((a,x)=>a+x[f],0);
+const scopedP=()=>PR.filter(p=>inS(p.k));
+const NSD=Object.fromEntries((typeof NS!="undefined"?NS:[]).map(r=>[r[0],{id:r[1],name:r[2],st:r[3],en:r[4],t:r[5],ss:Object.fromEntries((r[6]||"").split(",").filter(Boolean).map(x=>{const i=x.lastIndexOf(":");return [x.slice(0,i),+x.slice(i+1)]})),by:Object.fromEntries((r[7]||"").split(",").filter(Boolean).map(x=>{const i=x.lastIndexOf(":");return [x.slice(0,i),+x.slice(i+1)]}))}]));
+
+
+// ---------- ресурсы по руководителям ----------
+const LRES=(()=>{const M={};let N=0;
+  Object.values(PEOPLE).forEach(P=>{if(P.n=="— не назначен"||(typeof INACT!="undefined"&&INACT.includes(P.n)))return;const rows=P.rows.filter(r=>r.t>0);const T=rows.reduce((a,r)=>a+r.t,0);if(!T)return;N++;
+    const by={};rows.forEach(r=>{const l=LEAD(r.k);const b=by[l]=by[l]||{t:0,keys:[]};b.t+=r.t;b.keys.push(r.k)});const nl=Object.keys(by).length;
+    const np=rows.length;Object.entries(by).forEach(([l,b])=>{const m=M[l]=M[l]||{l,fte:0,hc:0,only:0,shared:0,t:0,keys:new Set(),ppl:[],roles:{},pj:{}};const f=b.t/T;m.fte+=f;m.hc++;m.t+=b.t;if(nl==1)m.only++;else m.shared++;b.keys.forEach(k=>m.keys.add(k));m.ppl.push({n:P.n,f,t:b.t,keys:b.keys});const r=roleOf(P.n);m.roles[r]=(m.roles[r]||0)+f});
+    rows.forEach(rw=>{const m=M[LEAD(rw.k)];const q=m.pj[rw.k]=m.pj[rw.k]||{k:rw.k,fte:0,hc:0,only:0,shared:0,t:0,ppl:[],roles:{}};const f=rw.t/T;q.fte+=f;q.hc++;q.t+=rw.t;if(np==1)q.only++;else q.shared++;q.ppl.push({n:P.n,f,t:rw.t,keys:[rw.k]});const r=roleOf(P.n);q.roles[r]=(q.roles[r]||0)+f})});
+  const L=Object.values(M);L.forEach(m=>{m.share=N?m.fte/N*100:0;m.keys=[...m.keys].sort();m.ppl.sort((a,b)=>b.f-a.f||b.t-a.t);m.sub=Object.values(m.pj).map(q=>{q.share=N?q.fte/N*100:0;q.ppl.sort((a,b)=>b.f-a.f||b.t-a.t);q.isP=1;return q}).sort((a,b)=>b.fte-a.fte)});return {N,L}})();
+$("lres-sum").innerHTML=`Сотрудников с задачами в спринтах: <b>${LRES.N}</b> · руководителей: <b>${LRES.L.length}</b> · работают у нескольких руководителей: <b>${Object.values(PEOPLE).filter(P=>P.n!="— не назначен"&&!(typeof INACT!="undefined"&&INACT.includes(P.n))&&new Set(P.rows.filter(r=>r.t>0).map(r=>LEAD(r.k))).size>1).length}</b>`;
+const f1=v=>(Math.round(v*10)/10).toLocaleString("ru");
+const maxShare=Math.max(1,...LRES.L.map(m=>m.share));
+table("tb-lres",[
+ {h:"Руководитель / проект",v:m=>m.l,f:m=>`<b>${esc(m.l)}</b>`,sf:q=>`${pl(q.k,jq([`project = "${q.k}"`]))} <span class="sub">${esc(pname(q.k))}</span>`},
+ {h:"Проекты",v:m=>m.keys.length,num:1,sf:q=>`<span class="sub">${esc((PBY[q.k]||{}).sp||"")}</span>`,f:m=>`<div class="plist" style="min-width:170px;flex-wrap:wrap"><b class="pc">${m.keys.length}</b>${m.keys.map(k=>pl(k,jq([`project = "${k}"`]))).join(" ")}</div>`},
+ {h:"Доля сотрудников",v:m=>m.share,num:1,tip:"Сколько процентов всех сотрудников с задачами занято у руководителя (в эквиваленте полных людей)",f:m=>`<div style="display:flex;align-items:center;gap:8px;min-width:170px"><div class="bar" style="flex:1"><i style="width:${m.share/maxShare*100}%;background:var(--accent)"></i></div><b>${f1(m.share)}%</b></div>`},
+ {h:"Людей, экв.",v:m=>m.fte,num:1,tip:"Сумма долей: сколько это полных людей",f:m=>f1(m.fte)},
+ {h:"Задействовано",v:m=>m.hc,num:1,tip:"Сколько разных людей имеют задачи в его проектах"},
+ {h:"Только у него",v:m=>m.only,num:1,tip:"Работают только в его проектах; в строке проекта — только в этом проекте"},
+ {h:"Делит с другими",v:m=>m.shared,num:1,tip:"Работают ещё у других руководителей"},
+ {h:"По ролям, экв.",v:m=>m.fte,num:1,cls:"wrap",f:m=>Object.entries(m.roles).sort((a,b)=>b[1]-a[1]).map(([r,v])=>`<span class="pill mute" title="${esc(r)}">${esc(r=="—"?"роль не указана":r)} ${f1(v)}</span>`).join(" ")},
+ {h:"Люди (доля у руководителя)",v:m=>m.hc,num:1,cls:"wrap",f:m=>nmList(m.ppl.map(x=>nameChip(x.n,jq([who(x.n),`project in (${x.keys.map(k=>'"'+k+'"').join(", ")})`]),x.f>=0.99?"ok":"mute",x.f>=0.99?"":Math.round(x.f*100)+"%")),8)},
+ {h:"Задач",v:m=>m.t,num:1}
+],()=>LRES.L,[2,"desc"],{key:m=>m.l,sub:m=>m.sub});
+// ---------- KPIs ----------
+function renderKpis(){
+  const P=scopedP(),T=sumOf(P,"t"),stuck=P.filter(p=>p.left<0).length;
+  const need=Object.keys(PEOPLE).filter(n=>needVisible(n)).length;
+  const sw=Object.keys(PEOPLE).filter(n=>switchVisible(n)).length;
+  const kp=[[T,"задач в спринтах","","sprint"],[P.length,"проектов","","sprint"],[pct(sumOf(P,"dn"),T)+"%","готово","","rel"],[stuck,"спринтов не закрыто",stuck?"bad":"","sprint"],
+    [need,"сотрудникам нужны задачи",need?"warn":"","need"],[Object.keys(PEOPLE).filter(overVisible).length,"перегружены бэклогом","bad","over"],[sw,"тормозят чужой проект",sw?"bad":"","switch"],[absVisibleRisk(),"отсутствуют, а задачи висят",absVisibleRisk()?"bad":"","abs"],[P.filter(p=>!NSD[p.k]||!NSD[p.k].t).length,"нет следующего спринта (или пустой)",P.some(p=>(!NSD[p.k]||!NSD[p.k].t)&&p.left<=3)?"bad":"","next"],[sumOf(P,"blk"),"в Blocked","bad","block"],[sumOf(P,"bl"),"в бэклоге","","people"]];
+  $("kpis").innerHTML=kp.map(([v,l,c,go])=>go?`<button class="kpi ${c}" data-go="${go}"><b>${v}</b><span>${l}</span></button>`:`<div class="kpi ${c}"><b>${v}</b><span>${l}</span></div>`).join("");
+}
+$("kpis").onclick=e=>{const b=e.target.closest("[data-go]");if(b)show(b.dataset.go)};
+
+// ---------- 1 sprint ----------
+const SEG=[["dn","Готово"],["ts","Тестируется"],["cr","Код ревью"],["rw","Реворк"],["wk","В работе"],["bl","Бэклог"]];
+table("tb-sprint",[
+ {h:"Проект",v:p=>p.k,f:projCell},
+ {h:"Руководитель",v:p=>p.lead,f:p=>`<span class="sub">${esc(p.lead)}</span>`},
+ {h:"Спринт",v:p=>p.sp,f:p=>esc(p.sp)},
+ {h:"Даты",v:p=>p.en,f:p=>`${fmt(p.st)} – ${fmt(p.en)}`},
+ {h:"Срок",v:p=>p.left,num:1,f:p=>p.left<0?`<span class="pill bad">Не закрыт · ${-p.left} дн.</span>`:p.left<=3?`<span class="pill warn">${p.left} дн.</span>`:`<span class="pill mute">${p.left} дн.</span>`},
+ {h:"Следующий спринт",v:p=>NSD[p.k]?(NSD[p.k].t?2:1):0,cls:"wrap",tip:"Есть ли в Jira следующий спринт (номер +1 к текущему) и сколько в нём задач. Подробнее — вкладка «Следующий спринт»",f:p=>{const n=NSD[p.k];if(!n)return `<span class="pill ${p.left<=3?"bad":"mute"}">не создан</span>`;return (n.t?`<span class="pill ok">есть</span> <a class="nl" href="${JB}issues/?jql=${encodeURIComponent("cf[10104] = "+n.id)}" target="_blank" rel="noopener" title="${esc(n.name)}">${n.t} задач</a>`:`<span class="pill ${p.left<=3?"bad":"warn"}">пустой</span>`)+`<div class="sub">${esc(n.name)}</div>`}},
+ {h:"Задач",v:p=>p.t,num:1,f:p=>nl(p.t,jq([`project = "${p.k}"`]))},
+ {h:"Прогресс",v:p=>p.done,f:p=>`<div class="bar" title="${SEG.map(([k,l])=>l+" "+p[k]).join(" · ")}">${SEG.map(([k])=>`<i style="width:${p[k]/p.t*100}%;background:var(--s-${k})"></i>`).join("")}</div>`},
+ {h:"Готово",v:p=>p.done,num:1,f:p=>p.done+"%"},
+ {h:"Самая старая задача",v:p=>p.oAge,num:1,tip:"Самая давно созданная незакрытая задача спринта: сколько дней назад создана",f:p=>p.oKey?`<a class="key" href="${JB}browse/${p.oKey}" target="_blank" rel="noopener">${p.oKey}</a> <span class="${lvl(p.oAge,30,90)}">${p.oAge} дн.</span>`:`<span class="sub">—</span>`},
+ {h:"Переходят из спринта в спринт",v:p=>p.carryOpen,num:1,tip:"Незакрытые задачи, которые были минимум в 2 спринтах (перенесены из закрытого спринта)",f:p=>nl(p.carryOpen,jq([`project = "${p.k}"`,"cf[10104] in closedSprints()",ST.open]),lvl(pct(p.carryOpen,p.t),20,40))+(p.carryOpen?` <span class="sub">${pct(p.carryOpen,p.t)}%</span>`:"")},
+ {h:"Люди",v:p=>p.ppl,num:1}
+],scopedP,[4,"asc"]);
+
+// ---------- 2 people ----------
+const allPos=[...new Set(Object.keys(PEOPLE).map(roleOf))].sort();
+$("f-pos").innerHTML=`<option value="">Все роли</option>`+allPos.map(p=>`<option>${esc(p)}</option>`).join("");
+function peopleRows(){
+  return Object.values(PEOPLE).map(P=>{const rows=P.rows.filter(r=>inS(r.k));if(!rows.length)return null;
+    const a={n:P.n,pos:roleOf(P.n),pr:rows.map(r=>r.k)};["t","bl","wk","cr","rw","ts","dn","bug"].forEach(f=>a[f]=sumRows(rows,f));a.open=a.t-a.dn;
+    a.need=needFlag(P.n);a.over=overFlag(P.n);a.sw=switchInfo(P.n).flag;a.tl=isTL(P.n);a.ab=absNow(P.n)||absSoon(P.n,7);return a}).filter(Boolean);
+}
+const zad=n=>{const m=n%10,h=n%100;return n+" "+(m==1&&h!=11?"задача":m>=2&&m<=4&&(h<12||h>14)?"задачи":"задач")};
+function switchTip(n){
+  const s=switchInfo(n);const tot=sumOf(s.stalled,"bl");const W=who(n);
+  const L=(v,parts,txt)=>`<a class="tl-a" href="${jq([W,...parts])}" target="_blank" rel="noopener">${txt||v}</a>`;
+  const pin=keys=>`project in (${keys.map(k=>'"'+k+'"').join(", ")})`;
+  const actKeys=s.active.flatMap(g=>g.keys),stKeys=s.stalled.flatMap(g=>g.stalledKeys);
+  const act=s.active.map(g=>{const k=pin(g.keys);const parts=[g.wk&&`в работе ${L(g.wk,[k,ST.wk])}`,g.cr&&`на ревью ${L(g.cr,[k,ST.cr])}`,g.rw&&`в реворке ${L(g.rw,[k,ST.rw])}`].filter(Boolean).join(", ");
+    return `<li><b>${esc(g.lead)}</b> <span>${g.keys.join(", ")}</span><br>${parts}</li>`}).join("");
+  const st=s.stalled.map(g=>{const k=pin(g.stalledKeys);return `<li><b>${esc(g.lead)}</b> <span>${g.stalledKeys.join(", ")}</span><br>в бэклоге ${L(g.bl,[k,ST.bl])}, в работу не взято ни одной`+(g.blStale?`, без движения &gt;7 дн.: ${L(g.blStale,[k,ST.bl,"updated <= -7d"])}`:"")+(g.blAge?`<br>самая старая создана ${g.blAge} дн. назад`:"")+(g.blUpd>=0?`, последнее изменение ${g.blUpd==0?"сегодня":g.blUpd+" дн. назад"}`:"")+`</li>`}).join("");
+  const aSum=sumOf(s.active,"act");
+  return `<div class="tt-h">Почему тормозит проект</div><p>Ведёт ${L(aSum,[pin(actKeys),"status in (10011, 10008, 10000)"],zad(aSum))} у ${s.active.length==1?"одного руководителя":s.active.length+" руководителей"}, а ${L(tot,[pin(stKeys),ST.bl],zad(tot))} у ${s.stalled.length==1?"другого руководителя":s.stalled.length+" других руководителей"} лежат в бэклоге, и ни одна не взята в работу.</p><div class="tt-s">Работает на</div><ul>${act}</ul><div class="tt-s bad">Стоит у</div><ul>${st}</ul><div class="tt-f">Цифры открывают список задач в Jira</div>`;
+}
+const flagChips=a=>(a.ab?`<span class="pill ${a.ab.fr>SNAP?"warn":"bad"}" title="${esc(a.ab.src+(a.ab.note?" · "+a.ab.note:""))}">${esc(absTxt(a.ab))}</span> `:"")+(a.tl?`<span class="pill mute">тимлид</span> `:"")+(a.need?`<span class="pill warn">нужны задачи</span> `:"")+(a.over?`<span class="pill bad">перегружен</span> `:"")+(a.sw?`<span class="pill bad has-tip" tabindex="0" data-tipn="${esc(a.n)}">тормозит проект ⓘ</span>`:"");
+const pp=(a,st)=>jq([who(a.n),projQ(),st]);
+const projList=(n,keys,field="assignee")=>`<div class="plist"><b class="pc" title="Проектов">${keys.length}</b>${keys.map(k=>pl(k,jq([who(n,field),"project = \""+k+"\""]))).join(" ")}</div>`;
+function leadsOf(n,keys){const M={};PEOPLE[n].rows.filter(r=>keys.includes(r.k)).forEach(r=>{const l=LEAD(r.k);const m=M[l]=M[l]||{l,keys:[],t:0};m.keys.push(r.k);m.t+=r.t});return Object.values(M).sort((a,b)=>b.t-a.t)}
+const leadChips=(n,ls)=>ls.map(m=>`<a class="who wl" href="${jq([who(n),`project in (${m.keys.map(k=>'"'+k+'"').join(", ")})`])}" target="_blank" rel="noopener" title="${esc(m.l)}: ${m.keys.join(", ")} — ${m.t} задач">${esc(m.l)} <b>${m.t}</b></a>`).join("");
+table("tb-people",[
+ {h:"Исполнитель",v:a=>a.n,f:a=>esc(a.n)+`<div class="flags">${flagChips(a)}</div>`},
+ {h:"Роль",v:a=>a.pos,f:a=>a.pos=="—"?`<span class="sub">не указана</span>`:esc(a.pos)},
+ {h:"Всего",v:a=>a.t,num:1,f:a=>nl(a.t,pp(a))},
+ {h:"Открыто",v:a=>a.open,num:1,tip:"Всё, кроме «Готово»",f:a=>nl(a.open,pp(a,ST.open),lvl(a.open,30,45))},
+ {h:"Бэклог",v:a=>a.bl,num:1,tip:"Статус «Сделать»",f:a=>nl(a.bl,pp(a,ST.bl))},
+ {h:"В работе",v:a=>a.wk,num:1,f:a=>nl(a.wk,pp(a,ST.wk))},
+ {h:"Код ревью",v:a=>a.cr,num:1,f:a=>nl(a.cr,pp(a,ST.cr))},
+ {h:"Реворк",v:a=>a.rw,num:1,f:a=>nl(a.rw,pp(a,ST.rw),a.rw?"mid":"")},
+ {h:"Тестируется",v:a=>a.ts,num:1,tip:"Test, In Staging, Ready for deploy (и Production), In Production, Blocked, Требует уточнения",f:a=>nl(a.ts,pp(a,ST.ts))},
+ {h:"Готово",v:a=>a.dn,num:1,f:a=>nl(a.dn,pp(a,ST.dn))},
+ {h:"Ошибок",v:a=>a.bug,num:1,f:a=>nl(a.bug,pp(a,'issuetype = "Ошибка"'))},
+ {h:"Руководители (ПМ)",v:a=>leadsOf(a.n,a.pr).length,num:1,cls:"wrap",tip:"Руководители проектов, у которых работает сотрудник, и число его задач у каждого",f:a=>{const ls=leadsOf(a.n,a.pr);return `<div class="plist"><b class="pc" title="Руководителей">${ls.length}</b>${leadChips(a.n,ls)}</div>`}},
+ {h:"Проекты",v:a=>a.pr.length,num:1,cls:"wrap",f:a=>projList(a.n,a.pr)}
+],()=>{const fl=$("p-flag").value,ps=$("f-pos").value,q=$("q-people").value.toLowerCase();
+  const r=peopleRows().filter(a=>(!ps||a.pos==ps)&&(!q||a.n.toLowerCase().includes(q))&&(!fl||(fl=="need"&&a.need)||(fl=="over"&&a.over)||(fl=="switch"&&a.sw)||(fl=="tl"&&a.tl)||(fl=="abs"&&a.ab)));
+  const s=k=>sumOf(r,k);
+  $("people-sum").innerHTML=`<span><b>${r.length}</b> чел.</span><span><b>${s("t")}</b> задач</span>`+SEG.slice().reverse().map(([k,l])=>`<span>${l} <b>${s(k)}</b></span>`).join("");
+  return r},[3,"desc"]);
+["p-flag","f-pos"].forEach(id=>$(id).onchange=()=>TABLES["tb-people"]());$("q-people").oninput=()=>TABLES["tb-people"]();
+
+// ---------- absences: risk ----------
+const OPENQ="status in (10100, 10011, 10000)";
+function absRows(){
+  const H=+$("a-h").value||0,lim=addD(SNAP,H),onlyRisk=$("a-risk").checked;
+  return AB.filter(a=>(!a.to||a.to>=SNAP)&&a.fr<=lim).map(a=>{
+    const P=PEOPLE[a.n],rows=P?P.rows.filter(r=>inS(r.k)):[];
+    if(!rows.length&&!allScope())return null;
+    const x={...a,pos:roleOf(a.n),now:a.fr<=SNAP,pr:rows.map(r=>r.k)};["bl","wk","rw","cr","ts","dn"].forEach(f=>x[f]=sumRows(rows,f));x.q=x.bl+x.wk+x.rw;
+    x.rk=rows.filter(r=>r.bl+r.wk+r.rw>0).map(r=>{const p=PBY[r.k];return {k:r.k,q:r.bl+r.wk+r.rw,en:p.en,hit:p.en>=a.fr&&(!a.to||addD(p.en,-2)<=a.to)}}).sort((u,v)=>v.q-u.q);
+    const LM={};x.rk.forEach(r=>{const l=LEAD(r.k);const m=LM[l]=LM[l]||{l,keys:[],t:0};m.keys.push(r.k);m.t+=r.q});x.ls=Object.values(LM).sort((u,v)=>v.t-u.t);x.endRisk=x.rk.some(r=>r.hit);x.when=x.now?(a.to?days(a.to):999):days(a.fr);
+    return x}).filter(x=>x&&(!onlyRisk||x.q>0));
+}
+const absVisibleRisk=()=>{const h=$("a-h"),r=$("a-risk");const ov=h.value,oc=r.checked;h.value=0;r.checked=true;const n=absRows().filter(x=>x.now).length;h.value=ov;r.checked=oc;return n};
+table("tb-abs",[
+ {h:"Сотрудник",v:a=>a.n,f:a=>esc(a.n)+`<div class="sub">${a.pos=="—"?"роль не указана":esc(a.pos)}</div>`},
+ {h:"Отсутствие",v:a=>a.ty,f:a=>`<span class="pill ${a.ty=="sick"?"bad":a.ty=="off"?"mute":"warn"}">${ABT[a.ty]}</span>${a.endRisk?` <span class="pill bad" title="Спринт заканчивается во время отсутствия или в течение 2 дней после">конец спринта</span>`:""}<div class="sub">${a.ty=="off"?fmt(a.fr):fmt(a.fr)+" – "+(a.to?fmt(a.to):"?")}</div>`},
+ {h:"Когда",v:a=>a.now?-1:a.when,num:1,cls:"wrap",tip:"Отсутствует сейчас или начнёт отсутствовать через N дней",f:a=>a.ty=="off"?`<b class="${a.now?"hi":"mid"}">${a.now?"Сегодня":fmt(a.fr)}</b> <span class="sub">${esc(a.note.replace("Отпросился: ",""))}</span>`:a.now?`<b class="hi">Сейчас</b> <span class="sub">${a.to?(a.when==0?"последний день":"ещё "+a.when+" дн."):"дата выхода не указана"}</span>`:`<span class="mid">через ${a.when} дн.</span>`},
+ {h:"Не закроются",v:a=>a.q,num:1,tip:"Бэклог + В работе + Реворк по выбранным проектам",f:a=>nl(a.q,jq([who(a.n),projQ(),OPENQ]),a.q?"hi":"")},
+ {h:"Бэклог",v:a=>a.bl,num:1,f:a=>nl(a.bl,jq([who(a.n),projQ(),ST.bl]))},
+ {h:"В работе",v:a=>a.wk,num:1,f:a=>nl(a.wk,jq([who(a.n),projQ(),ST.wk]))},
+ {h:"Реворк",v:a=>a.rw,num:1,f:a=>nl(a.rw,jq([who(a.n),projQ(),ST.rw]),a.rw?"mid":"")},
+ {h:"Ревью / тест",v:a=>a.cr+a.ts,num:1,tip:"Ждут других, но вопросы по ним некому будет закрыть",f:a=>nl(a.cr+a.ts,jq([who(a.n),projQ(),"status not in (10100, 10011, 10000, 10001)"]))},
+ {h:"Проекты под риском",v:a=>a.rk.length,num:1,cls:"wrap",tip:"Проекты, где у сотрудника остались незакрытые задачи. Оранжевым — спринт заканчивается во время отсутствия или в течение 2 дней после него",f:a=>a.rk.length?`<div class="plist">${a.rk.map(r=>`<a class="pl${r.hit?" wl same":""}" style="${r.hit?"border-color:var(--warn);background:var(--warn-soft)":""}" href="${jq([who(a.n),"project = \""+r.k+"\"",OPENQ])}" target="_blank" rel="noopener" title="${esc(pname(r.k))} · ${esc(LEAD(r.k))} · спринт до ${fmt(r.en)}${r.hit?" — спринт заканчивается во время отсутствия или сразу после":""}">${r.k} <b>${r.q}</b></a>`).join(" ")}</div>`:`<span class="sub">—</span>`},
+ {h:"Руководители (ПМ)",v:a=>a.ls.length,num:1,cls:"wrap",tip:"Кому переназначать задачи",f:a=>a.ls.length?`<div class="plist">${a.ls.map(m=>`<a class="who wl" href="${jq([who(a.n),`project in (${m.keys.map(k=>'"'+k+'"').join(", ")})`,OPENQ])}" target="_blank" rel="noopener" title="${esc(m.l)}: ${m.keys.join(", ")} — ${m.t} незакрытых задач">${esc(m.l)} <b>${m.t}</b></a>`).join("")}</div>`:`<span class="sub">—</span>`},
+ {h:"Источник",v:a=>a.src,cls:"wrap",f:a=>`<span class="sub">${esc(a.src)}${a.note?" · "+esc(a.note):""}</span>`}
+],()=>{const r=absRows();
+  $("abs-sum").innerHTML=`<span><b>${r.length}</b> отсутствий</span><span>Сейчас <b>${r.filter(a=>a.now).length}</b></span><span>Скоро <b>${r.filter(a=>!a.now).length}</b></span><span>Под конец спринта <b>${r.filter(a=>a.endRisk).length}</b></span><span>Задач не закроется <b>${sumOf(r,"q")}</b></span>`;return r},[2,"asc"]);
+$("a-h").oninput=renderAll;$("a-risk").onchange=renderAll;
+if(typeof ABSAT!="undefined")$("abs-src").textContent=`Bitrix обновлён ${fmt(ABSAT.bx.slice(0,10))} ${ABSAT.bx.slice(11,16)}, Telegram прочитан ${fmt((ABSAT.tgChecked||ABSAT.tg).slice(0,10))} ${(ABSAT.tgChecked||ABSAT.tg).slice(11,16)}.`;
+
+// ---------- 3 need tasks ----------
+const EXCL=n=>isTL(n)||/Project Manager|QA Engineer/.test(roleOf(n))||n=="— не назначен";
+function needFlag(n){if(n=="— не назначен"||absNow(n)||(typeof INACT!="undefined"&&INACT.includes(n)))return false;return needInfo(n)<=(+$("n-th").value||0)&&(!EXCL(n)||$("n-all").checked)}
+function donorsFor(n,keys){const th=+$("d-th").value||0;const me=roleOf(n);const M={};
+  AX.forEach(r=>{if(r[0]==n||r[0]=="— не назначен"||!keys.includes(r[1])||!r[3])return;
+    const pos=roleOf(r[0]),same=me!="—"&&pos==me,pmRole=/Project Manager/.test(pos),ownProj=LEAD(r[1])==r[0];
+    if(!(same||pmRole||ownProj))return;
+    const d=M[r[0]]=M[r[0]]||{n:r[0],pos,bl:0,keys:[],same,pm:!same};d.bl+=r[3];d.keys.push(r[1])});
+  return Object.values(M).filter(d=>d.bl>th).sort((a,b)=>(b.same-a.same)||(b.bl-a.bl))}
+function needVisible(n){return needFlag(n)&&PEOPLE[n].rows.some(r=>inS(r.k))}
+table("tb-need",[
+ {h:"Сотрудник",v:a=>a.n,f:a=>esc(a.n)+(a.tl?` <span class="pill mute">тимлид</span>`:"")},
+ {h:"Роль",v:a=>a.pos,f:a=>a.pos=="—"?`<span class="sub">не указана</span>`:esc(a.pos)},
+ {h:"Состояние",v:a=>a.q,f:a=>a.q==0?`<span class="pill bad">Без задач</span>`:`<span class="pill warn">Заканчиваются</span>`},
+ {h:"Осталось",v:a=>a.q,num:1,tip:"Бэклог + В работе + Реворк по всем проектам",f:a=>nl(a.q,jq([who(a.n),"status in (10100, 10011, 10000)"]),a.q==0?"hi":"mid")},
+ {h:"Бэклог",v:a=>a.bl,num:1,f:a=>nl(a.bl,jq([who(a.n),ST.bl]))},
+ {h:"В работе",v:a=>a.wk,num:1,f:a=>nl(a.wk,jq([who(a.n),ST.wk]))},
+ {h:"Ждут ревью/теста",v:a=>a.cr+a.ts,num:1,f:a=>nl(a.cr+a.ts,jq([who(a.n),"status not in (10100, 10011, 10000, 10001)"]))},
+ {h:"Готово",v:a=>a.dn,num:1,f:a=>nl(a.dn,jq([who(a.n),ST.dn]))},
+ {h:"У кого взять задачи",v:a=>a.donors.length,num:1,cls:"wrap",tip:"Коллеги из тех же проектов с той же ролью и ПМ (их задачи может взять любой), у которых в бэклоге общих проектов больше порога",f:a=>a.donors.length?`<div class="plist">${a.donors.slice(0,8).map(d=>`<a class="who wl${d.same?" same":""}" href="${jq([who(d.n),`project in (${d.keys.map(k=>'"'+k+'"').join(", ")})`,ST.bl])}" target="_blank" rel="noopener" title="${esc(d.n)} · ${esc(d.pos)} · в бэклоге ${d.bl} в ${d.keys.join(", ")}">${d.pm&&!d.same?`<i class="pmtag">ПМ</i>`:""}${esc(d.n)} <b>${d.bl}</b></a>`).join("")}${a.donors.length>8?`<span class="sub">+${a.donors.length-8}</span>`:""}</div>`:`<span class="sub">${a.pos=="—"?"роль не указана, ПМ с бэклогом нет":"нет подходящих"}</span>`},
+ {h:"Руководители (ПМ)",v:a=>a.ls.length,num:1,cls:"wrap",tip:"Руководители проектов сотрудника — им делегировать задачи",f:a=>`<div class="plist"><b class="pc">${a.ls.length}</b>${leadChips(a.n,a.ls)}</div>`},
+ {h:"Проекты",v:a=>a.pr.length,num:1,cls:"wrap",f:a=>projList(a.n,a.pr)}
+],()=>{const r=Object.keys(PEOPLE).filter(needVisible).map(n=>{const rows=PEOPLE[n].rows;const a={n,pos:roleOf(n),tl:isTL(n),pr:rows.map(r=>r.k)};a.ls=leadsOf(n,a.pr);a.donors=donorsFor(n,a.pr);["bl","wk","cr","rw","ts","dn"].forEach(f=>a[f]=sumRows(rows,f));a.q=a.bl+a.wk+a.rw;return a});
+  $("need-sum").innerHTML=`<span><b>${r.length}</b> чел.</span><span>Без задач <b>${r.filter(a=>a.q==0).length}</b></span><span>Заканчиваются <b>${r.filter(a=>a.q>0).length}</b></span>`;return r},[3,"asc"]);
+$("n-th").oninput=renderAll;$("n-all").onchange=renderAll;$("d-th").oninput=()=>TABLES["tb-need"]();
+
+// ---------- overloaded ----------
+const isPMlike=n=>/Project Manager/.test(roleOf(n))||PR.some(p=>p.lead==n);
+const blTotal=n=>sumRows(PEOPLE[n].rows,"bl");
+function overFlag(n){if(n=="— не назначен")return false;const ex=isTL(n)||isPMlike(n)||/QA Engineer/.test(roleOf(n));return blTotal(n)>=(+$("o-th").value||1)&&(!ex||$("o-all").checked)}
+function overVisible(n){return overFlag(n)&&PEOPLE[n].rows.some(r=>r.bl&&inS(r.k))}
+function receiversFor(n,keys){const me=roleOf(n),pm=isPMlike(n);const M={};
+  AX.forEach(r=>{if(r[0]==n||!keys.includes(r[1])||!PEOPLE[r[0]]||!needFlag(r[0]))return;const pos=roleOf(r[0]);if(!(pm||(me!="—"&&pos==me)))return;
+    const m=M[r[0]]=M[r[0]]||{n:r[0],pos,q:needInfo(r[0]),keys:[],same:me!="—"&&pos==me};m.keys.push(r[1])});
+  return Object.values(M).sort((a,b)=>(b.same-a.same)||(a.q-b.q))}
+table("tb-over",[
+ {h:"Сотрудник",v:a=>a.n,f:a=>esc(a.n)+`<div class="flags">${a.tl?`<span class="pill mute">тимлид</span> `:""}${a.pm?`<span class="pill mute">ПМ</span>`:""}</div>`},
+ {h:"Роль",v:a=>a.pos,f:a=>a.pos=="—"?`<span class="sub">не указана</span>`:esc(a.pos)},
+ {h:"Бэклог",v:a=>a.bl,num:1,f:a=>nl(a.bl,jq([who(a.n),ST.bl]),a.bl>=15?"hi":"mid")},
+ {h:"Без движения >7 дн.",v:a=>a.blStale,num:1,f:a=>a.blStale?nl(a.blStale,jq([who(a.n),ST.bl,"updated <= -7d"])):`<span class="sub">0</span>`},
+ {h:"Самая старая, дн.",v:a=>a.blAge,num:1,f:a=>`<span class="${lvl(a.blAge,30,90)}">${a.blAge}</span>`},
+ {h:"В работе",v:a=>a.wk,num:1,f:a=>nl(a.wk,jq([who(a.n),ST.wk]))},
+ {h:"Реворк",v:a=>a.rw,num:1,f:a=>nl(a.rw,jq([who(a.n),ST.rw]),a.rw?"mid":"")},
+ {h:"Кому отдать",v:a=>a.rec.length,num:1,cls:"wrap",tip:"Сотрудники тех же проектов, у которых заканчиваются задачи. Число — сколько задач у них осталось",f:a=>a.rec.length?`<div class="plist">${a.rec.slice(0,8).map(m=>`<a class="who wl${m.same?" same":""}" href="${jq([who(a.n),`project in (${m.keys.map(k=>'"'+k+'"').join(", ")})`,ST.bl])}" target="_blank" rel="noopener" title="${esc(m.n)} · ${esc(m.pos)} · осталось задач: ${m.q}. Ссылка открывает бэклог перегруженного в общих проектах: ${m.keys.join(", ")}">${esc(m.n)} <b>${m.q}</b></a>`).join("")}${a.rec.length>8?`<span class="sub">+${a.rec.length-8}</span>`:""}</div>`:`<span class="sub">свободных в этих проектах нет</span>`},
+ {h:"Руководители (ПМ)",v:a=>a.ls.length,num:1,cls:"wrap",f:a=>`<div class="plist"><b class="pc">${a.ls.length}</b>${leadChips(a.n,a.ls)}</div>`},
+ {h:"Проекты с бэклогом",v:a=>a.bk.length,num:1,cls:"wrap",f:a=>`<div class="plist"><b class="pc">${a.bk.length}</b>${a.bk.map(r=>`<a class="pl" href="${jq([who(a.n),"project = \""+r.k+"\"",ST.bl])}" target="_blank" rel="noopener" title="${esc(pname(r.k))} · ${esc(LEAD(r.k))}">${r.k} <b>${r.bl}</b></a>`).join(" ")}</div>`}
+],()=>{const r=Object.keys(PEOPLE).filter(overVisible).map(n=>{const rows=PEOPLE[n].rows;const a={n,pos:roleOf(n),tl:isTL(n),pm:isPMlike(n),pr:rows.map(r=>r.k)};
+    ["bl","wk","rw","blStale"].forEach(f=>a[f]=sumRows(rows,f));a.blAge=Math.max(0,...rows.filter(r=>r.bl).map(r=>r.blAge));
+    a.bk=rows.filter(r=>r.bl).sort((x,y)=>y.bl-x.bl);a.ls=leadsOf(n,a.pr);a.rec=receiversFor(n,a.bk.map(r=>r.k));return a});
+  $("over-sum").innerHTML=`<span><b>${r.length}</b> чел.</span><span>Задач в их бэклоге <b>${sumOf(r,"bl")}</b></span><span>Есть кому отдать <b>${r.filter(a=>a.rec.length).length}</b></span>`;return r},[2,"desc"]);
+$("o-th").oninput=renderAll;$("o-all").onchange=renderAll;
+
+// ---------- 4 switching ----------
+function switchVisible(n){const s=switchInfo(n);return s.flag&&sumOf(s.stalled,"bl")>=(+$("s-th").value||1)&&s.stalled.some(g=>g.stalledKeys.some(inS))}
+const grpCell=(g,n,kind)=>`<div class="grp"><span class="who">${esc(g.lead)}</span> `+(kind=="act"?`<span class="sub">в работе</span> ${nl(g.act,jq([who(n),`project in (${g.keys.map(k=>'"'+k+'"').join(", ")})`,"status in (10011, 10008, 10000)"]))}`:`<span class="sub">в бэклоге</span> ${nl(g.bl,jq([who(n),`project in (${g.stalledKeys.map(k=>'"'+k+'"').join(", ")})`,ST.bl]),"hi")}`)+` <span class="sub">${(kind=="act"?g.keys:g.stalledKeys).join(", ")}</span></div>`;
+table("tb-switch",[
+ {h:"Сотрудник",v:a=>a.n,f:a=>esc(a.n)+(a.tl?` <span class="pill mute">тимлид</span>`:"")+`<div class="flags"><span class="pill bad has-tip" tabindex="0" data-tipn="${esc(a.n)}">почему ⓘ</span></div>`},
+ {h:"Роль",v:a=>a.pos,f:a=>a.pos=="—"?`<span class="sub">не указана</span>`:esc(a.pos)},
+ {h:"Работает на",v:a=>a.active.map(g=>g.lead).join(),cls:"wrap",f:a=>a.active.map(g=>grpCell(g,a.n,"act")).join("")},
+ {h:"Стоит у",v:a=>a.stalled.map(g=>g.lead).join(),cls:"wrap",f:a=>a.stalled.map(g=>grpCell(g,a.n,"st")).join("")},
+ {h:"Застряло в бэклоге",v:a=>a.stBl,num:1,f:a=>`<span class="${lvl(a.stBl,3,8)}">${a.stBl}</span>`},
+ {h:"Из них без движения >7 дн.",v:a=>a.stStale,num:1},
+ {h:"Самая старая, дн.",v:a=>a.stAge,num:1,tip:"Сколько дней назад создана самая старая задача в бэклоге",f:a=>`<span class="${lvl(a.stAge,30,90)}">${a.stAge}</span>`}
+],()=>{const r=Object.keys(PEOPLE).filter(switchVisible).map(n=>{const s=switchInfo(n);return {n,pos:roleOf(n),tl:isTL(n),active:s.active,stalled:s.stalled,stBl:sumOf(s.stalled,"bl"),stStale:sumOf(s.stalled,"blStale"),stAge:Math.max(...s.stalled.map(g=>g.blAge))}});
+  $("switch-sum").innerHTML=`<span><b>${r.length}</b> чел.</span><span>Задач застряло <b>${sumOf(r,"stBl")}</b></span>`;return r},[4,"desc"]);
+$("s-th").oninput=renderAll;
+
+// ---------- 5 team leads ----------
+function tlRows(){
+  const names=new Set(TL);if($("t-pl").checked)PR.forEach(p=>names.add(p.lead));
+  return [...names].map(n=>{const rows=(PEOPLE[n]?PEOPLE[n].rows:[]).filter(r=>inS(r.k));
+    const myProj=PR.filter(p=>p.lead==n&&inS(p.k)).map(p=>p.k);
+    const team=new Set();AX.forEach(r=>{if(myProj.includes(r[1])&&r[0]!=n)team.add(r[0])});
+    const idle=[...team].filter(m=>PEOPLE[m]&&needFlag(m));
+    const a={n,inGroup:isTL(n),isPL:PR.some(p=>p.lead==n),pos:roleOf(n),bl:sumRows(rows,"bl"),blStale:sumRows(rows,"blStale"),blAge:Math.max(0,...rows.filter(r=>r.bl).map(r=>r.blAge)),act:sumRows(rows,"wk")+sumRows(rows,"cr")+sumRows(rows,"rw"),blKeys:rows.filter(r=>r.bl).map(r=>r.k),myProj,idle,team:team.size};
+    a.flag=a.bl>=(+$("t-th").value||1);return a}).filter(a=>a.bl>0||a.myProj.length);
+}
+table("tb-tl",[
+ {h:"Тимлид",v:a=>a.n,f:a=>esc(a.n)+`<div class="flags">${a.inGroup?`<span class="pill mute">adata-team-leads</span> `:""}${a.isPL?`<span class="pill mute">рук. проекта</span>`:""}</div>`},
+ {h:"Состояние",v:a=>a.flag?1:0,num:1,f:a=>a.flag?`<span class="pill bad">Держит бэклог</span>`:a.bl?`<span class="pill warn">Немного</span>`:`<span class="pill ok">Распределено</span>`},
+ {h:"Бэклог на себе",v:a=>a.bl,num:1,f:a=>nl(a.bl,jq([who(a.n),projQ(),ST.bl]),a.flag?"hi":"")},
+ {h:"Без движения >7 дн.",v:a=>a.blStale,num:1},
+ {h:"Самая старая, дн.",v:a=>a.blAge,num:1,f:a=>a.blAge?`<span class="${lvl(a.blAge,30,90)}">${a.blAge}</span>`:`<span class="sub">—</span>`},
+ {h:"Где держит",v:a=>a.blKeys.join(" "),cls:"wrap",f:a=>a.blKeys.map(k=>pl(k,jq([who(a.n),"project = \""+k+"\"",ST.bl]))).join(" ")||`<span class="sub">—</span>`},
+ {h:"Сам в работе",v:a=>a.act,num:1,tip:"В работе + Код ревью + Реворк"},
+ {h:"Без задач в его проектах",v:a=>a.idle.length,num:1,tip:"Сотрудники проектов, где он руководитель, у которых заканчиваются задачи",f:a=>a.idle.length?`<span class="mid" title="${esc(a.idle.join(", "))}">${a.idle.length}</span> <span class="sub">из ${a.team}</span>`:(a.myProj.length?`<span class="sub">0 из ${a.team}</span>`:`<span class="sub">—</span>`)}
+],()=>{const r=tlRows();$("tl-sum").innerHTML=`<span><b>${r.filter(a=>a.flag).length}</b> держат бэклог</span><span>Задач на тимлидах в бэклоге <b>${sumOf(r,"bl")}</b></span>`;return r},[2,"desc"]);
+$("t-th").oninput=renderAll;$("t-pl").onchange=renderAll;
+
+// ---------- QA ----------
+table("tb-qa",[
+ {h:"Тестировщик",v:q=>q.n,f:q=>esc(q.n)+(q.pr.length>20?` <span class="pill warn">похоже на значение по умолчанию</span>`:"")},
+ {h:"Задач",v:q=>q.t,num:1,f:q=>nl(q.t,jq([who(q.n,"cf[10902]"),projQ()]))},
+ {h:"Сейчас в Test",v:q=>q.tst,num:1,f:q=>nl(q.tst,jq([who(q.n,"cf[10902]"),projQ(),'status = "Test"']),lvl(q.tst,20,40))},
+ {h:"Готово",v:q=>q.dn,num:1,f:q=>nl(q.dn,jq([who(q.n,"cf[10902]"),projQ(),ST.dn]))},
+ {h:"Проекты",v:q=>q.pr.length,num:1,cls:"wrap",f:q=>projList(q.n,q.pr,"cf[10902]")}
+],()=>{const M={};QX.forEach(r=>{if(!inS(r[1]))return;const q=M[r[0]]=M[r[0]]||{n:r[0],t:0,tst:0,dn:0,pr:[]};q.t+=r[2];q.tst+=r[3];q.dn+=r[4];q.pr.push(r[1])});return Object.values(M)},[2,"desc"]);
+
+// ---------- bottlenecks ----------
+const XP=X.map(x=>({k:x[0],s:x[1],st:x[2],a:x[3],d:x[4],pr:x[5],p:x[0].split("-")[0]}));
+const sts=[...new Set(XP.map(x=>x.st))];
+$("f-st").innerHTML=`<option value="">Все статусы</option>`+sts.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+const stPill=s=>`<span class="pill ${s=="Blocked"?"bad":s=="Need Rework"||s=="Требует уточнения"?"warn":"mute"}">${esc(s)}</span>`;
+table("tb-block",[
+ {h:"Ключ",v:x=>x.k,f:x=>`<a class="key" href="${JB}browse/${x.k}" target="_blank" rel="noopener">${x.k}</a>`},
+ {h:"Задача",v:x=>x.s,cls:"wrap"},
+ {h:"Статус",v:x=>x.st,f:x=>stPill(x.st)},
+ {h:"Исполнитель",v:x=>x.a},
+ {h:"Руководитель",v:x=>LEAD(x.p),f:x=>`<span class="sub">${esc(LEAD(x.p))}</span>`},
+ {h:"Без обновлений, дн.",v:x=>x.d,num:1,f:x=>`<span class="${lvl(x.d,14,30)}">${x.d}</span>`},
+ {h:"Приоритет",v:x=>x.pr,f:x=>/высокий|Неотложный/.test(x.pr)?`<span class="pill bad">${x.pr}</span>`:`<span class="sub">${x.pr}</span>`}
+],()=>XP.filter(x=>inS(x.p)&&(!$("f-st").value||x.st==$("f-st").value)&&(!$("q-block").value||(x.k+" "+x.s+" "+x.a).toLowerCase().includes($("q-block").value.toLowerCase()))),[5,"desc"]);
+$("q-block").oninput=()=>TABLES["tb-block"]();$("f-st").onchange=()=>TABLES["tb-block"]();
+
+// ---------- stability / quality / release ----------
+table("tb-stab",[
+ {h:"Проект",v:p=>p.k,f:projCell},{h:"Руководитель",v:p=>p.lead,f:p=>`<span class="sub">${esc(p.lead)}</span>`},
+ {h:"Задач",v:p=>p.t,num:1},
+ {h:"Перенесено",v:p=>p.carry,num:1},
+ {h:"% перенесено",v:p=>pct(p.carry,p.t),num:1,f:p=>`<span class="${lvl(pct(p.carry,p.t),40,60)}">${pct(p.carry,p.t)}%</span>`},
+ {h:"Добавлено после старта",v:p=>p.add,num:1},
+ {h:"% добавлено",v:p=>pct(p.add,p.t),num:1,f:p=>`<span class="${lvl(pct(p.add,p.t),40,70)}">${pct(p.add,p.t)}%</span>`},
+ {h:"Внеплановые",v:p=>p.unpl,num:1},
+ {h:"Без обновлений >14 дн.",v:p=>p.stale,num:1,f:p=>`<span class="${lvl(p.stale,3,10)}">${p.stale}</span>`}
+],scopedP,[4,"desc"]);
+table("tb-qual",[
+ {h:"Проект",v:p=>p.k,f:projCell},{h:"Руководитель",v:p=>p.lead,f:p=>`<span class="sub">${esc(p.lead)}</span>`},
+ {h:"Задач",v:p=>p.t,num:1},
+ {h:"Ошибок",v:p=>p.bug,num:1,f:p=>nl(p.bug,jq([`project = "${p.k}"`,'issuetype = "Ошибка"']))},
+ {h:"Доля ошибок",v:p=>pct(p.bug,p.t),num:1,f:p=>`<span class="${lvl(pct(p.bug,p.t),25,40)}">${pct(p.bug,p.t)}%</span>`},
+ {h:"Need Rework",v:p=>p.rw,num:1,f:p=>nl(p.rw,jq([`project = "${p.k}"`,ST.rw]),"mid")},
+ {h:"Blocked",v:p=>p.blk,num:1,f:p=>nl(p.blk,jq([`project = "${p.k}"`,'status = "Blocked"']),"hi")}
+],scopedP,[4,"desc"]);
+const tstKind=n=>{if(!n)return "qa";const r=roleOf(n);return /QA|тест|test/i.test(r)?"qa":/Project Manager|менеджер/i.test(r)?"pm":"ot"};
+const tstSplit=k=>{const o={qa:{n:0,who:[]},pm:{n:0,who:[]},ot:{n:0,who:[]}};const m=(typeof TST!="undefined"&&TST[k])||{};Object.entries(m).forEach(([n,v])=>{const g=o[tstKind(n)];g.n+=v[0];if(!n)g.who.push("");else v.slice(1).forEach(l=>g.who.push(l))});return o};
+const tstJq=(k,who)=>{const l=who.filter(Boolean).map(x=>'"'+x+'"');const un=who.includes("");const a=l.length&&un?`(cf[10902] in (${l.join(", ")}) OR cf[10902] is EMPTY)`:l.length?`cf[10902] in (${l.join(", ")})`:un?"cf[10902] is EMPTY":"";return jq([`project = "${k}"`,'status = "Test"',a])};
+const relFin=p=>pct(p.dn+p.rdy+p.tst+p.cr,p.t);
+table("tb-rel",[
+ {h:"Проект",v:p=>p.k,f:projCell},{h:"Руководитель",v:p=>p.lead,f:p=>`<span class="sub">${esc(p.lead)}</span>`},
+ {h:"Задач",v:p=>p.t,num:1,f:p=>nl(p.t,jq([`project = "${p.k}"`]))},
+ {h:"Готовность спринта",v:p=>p.done,num:1,tip:"Доля задач спринта в статусе «Готово». Светлая часть полосы — задачи на финише (Code review, Test, Ready for deploy / Staging). Красным — если готовность отстаёт от прошедшего времени спринта больше чем на 25 п.п.",f:p=>{const fin=relFin(p),lag=p.time-p.done;return `<div style="display:flex;align-items:center;gap:8px;min-width:170px"><div class="bar" style="flex:1" title="Готово ${p.done}% · на финише ещё ${fin-p.done}% · прошло времени ${p.time}%"><i style="width:${p.done}%;background:var(--s-dn)"></i><i style="width:${fin-p.done}%;background:var(--s-dn);opacity:.35"></i></div><b class="${lag>25?"hi":lag>10?"mid":""}" style="min-width:3.2em;text-align:right">${p.done}%</b></div>`+(fin>p.done?`<span class="sub">с финишем ${fin}%</span>`:"")}},
+ {h:"Code review",v:p=>p.cr,num:1,f:p=>nl(p.cr,jq([`project = "${p.k}"`,ST.cr]))},
+ {h:"На тесте у тестера",v:p=>tstSplit(p.k).qa.n,num:1,tip:"Задачи в статусе Test, поле «Тестировщик» — QA Engineer или пустое",f:p=>{const x=tstSplit(p.k).qa;return nl(x.n,tstJq(p.k,x.who))}},
+ {h:"На тесте у PM",v:p=>tstSplit(p.k).pm.n,num:1,tip:"Задачи в статусе Test, поле «Тестировщик» — Project Manager",f:p=>{const x=tstSplit(p.k).pm;return nl(x.n,tstJq(p.k,x.who),"mid")}},
+ {h:"На тесте у тимлида / остальных",v:p=>tstSplit(p.k).ot.n,num:1,tip:"Задачи в статусе Test, поле «Тестировщик» — тимлид или другой сотрудник (не QA и не PM)",f:p=>{const x=tstSplit(p.k).ot;return nl(x.n,tstJq(p.k,x.who),x.n?"hi":"")}},
+ {h:"Ready for deploy / Staging",v:p=>p.rdy,num:1,f:p=>p.rdy?`<b>${p.rdy}</b>`:"0"},
+ {h:"Готово",v:p=>p.dn,num:1}
+],scopedP,[3,"desc"]);
+
+// ---------- next sprint ----------
+const jqs=(id,extra)=>JB+"issues/?jql="+encodeURIComponent(["cf[10104] = "+id,...(extra||[]).filter(Boolean)].join(" AND ")+" ORDER BY status ASC, updated DESC");
+const nextRows=()=>scopedP().map(p=>{const n=NSD[p.k];const carry=p.t-p.dn;
+  const ppl=Object.values(PEOPLE).filter(P=>P.n!="— не назначен"&&P.rows.some(r=>r.k==p.k&&r.t>0)).map(P=>P.n);
+  const idle=n?ppl.filter(x=>!n.by[x]):[];
+  const state=!n?"none":!n.t?"empty":"ok";
+  return {...p,ns:n,carry,idle,state,risk:state!="ok"&&p.left<=3}});
+const nsPill=x=>x.state=="none"?`<span class="pill ${x.risk?"bad":"mute"}">не создан</span>`:x.state=="empty"?`<span class="pill ${x.risk?"bad":"warn"}">пустой</span>`:`<span class="pill ok">готов</span>`;
+table("tb-next",[
+ {h:"Проект",v:p=>p.k,f:projCell},{h:"Руководитель",v:p=>p.lead,f:p=>`<span class="sub">${esc(p.lead)}</span>`},
+ {h:"Текущий до",v:p=>p.left,num:1,tip:"Дата окончания текущего спринта; красным — уже прошла",f:p=>`${fmt(p.en)} <span class="${p.left<0?"hi":p.left<=3?"mid":"sub"}">${p.left<0?"просрочен":p.left==0?"сегодня":"ещё "+p.left+" дн."}</span>`},
+ {h:"Перейдёт",v:p=>p.carry,num:1,tip:"Незакрытые задачи текущего спринта — перейдут в следующий, если не закрыть",f:p=>nl(p.carry,jq([`project = "${p.k}"`,"status != 10001"]),p.left<=3&&p.carry?"mid":"")},
+ {h:"Следующий спринт",v:p=>p.state=="ok"?2:p.state=="empty"?1:0,cls:"wrap",f:p=>nsPill(p)+(p.ns?` <span>${esc(p.ns.name)}</span>`+(p.ns.st?` <span class="sub">${fmt(p.ns.st)}–${fmt(p.ns.en)}</span>`:` <span class="sub">даты не заданы</span>`):"")},
+ {h:"Запланировано",v:p=>p.ns?p.ns.t:-1,num:1,tip:"Задач уже в следующем спринте",f:p=>p.ns?(p.ns.t?`<a class="nl" href="${jqs(p.ns.id)}" target="_blank" rel="noopener">${p.ns.t}</a>`:`<span class="sub">0</span>`):`<span class="sub">—</span>`},
+ {h:"Статусы",v:p=>p.ns?p.ns.t:0,cls:"wrap",f:p=>p.ns&&p.ns.t?Object.entries(p.ns.ss).map(([s,c])=>`<span class="sub">${esc(s)} ${c}</span>`).join(" · "):`<span class="sub">—</span>`},
+ {h:"Исполнители в следующем",v:p=>p.ns?Object.keys(p.ns.by).length:0,num:1,cls:"wrap",f:p=>p.ns&&p.ns.t?`<div class="plist">${Object.entries(p.ns.by).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`<a class="who wl" href="${jqs(p.ns.id,[who(n)])}" target="_blank" rel="noopener">${esc(n)} <b>${c}</b></a>`).join("")}</div>`:`<span class="sub">—</span>`},
+ {h:"Без задач в следующем",v:p=>p.idle.length,num:1,cls:"wrap",tip:"Работают в текущем спринте проекта, а в следующем задач нет",f:p=>p.ns?(p.idle.length?`<div class="plist"><b class="pc">${p.idle.length}</b>${p.idle.map(n=>`<span class="who">${esc(n)}</span>`).join("")}</div>`:`<span class="sub">все с задачами</span>`):`<span class="sub">—</span>`}
+],()=>{const r=nextRows();
+  $("ns-sum").innerHTML=`<span>Следующий создан: <b>${r.filter(x=>x.ns).length}</b> из ${r.length}</span><span>Не создан, а текущий кончается ≤3 дн. или просрочен: <b class="${r.filter(x=>x.risk&&x.state=="none").length?"hi":""}">${r.filter(x=>x.risk&&x.state=="none").length}</b></span><span>Пустых: <b>${r.filter(x=>x.state=="empty").length}</b></span><span>Перейдёт задач: <b>${sumOf(r,"carry")}</b></span><span>Людей без задач в следующем: <b>${r.reduce((s,x)=>s+x.idle.length,0)}</b></span>`;
+  return r},[4,"asc"]);
+if(typeof NSAT!="undefined")$("ns-src").textContent="Будущие спринты из Jira на "+fmt(NSAT.slice(0,10))+" "+NSAT.slice(11,16)+".";
+
+// ---------- data quality ----------
+function renderNotes(){
+  const P=scopedP(),T=sumOf(P,"t"),stuck=P.filter(p=>p.left<0);
+  const notes=[["Оценки времени","0 из "+T,"Ни у одной задачи нет первоначальной оценки. План/факт и burndown по часам построить нельзя."],
+   ["Срок исполнения (duedate)","не заполнен","Без сроков нельзя посчитать просрочки по задачам."],
+   ["Списание времени",Math.round(sumOf(P,"h")).toLocaleString("ru")+" ч","Время списывают не во всех проектах; для отчёта по трудозатратам данных мало."],
+   ["Незакрытые спринты",stuck.length+"",stuck.length?"Даты прошли, но спринты активны: "+stuck.map(p=>p.k).join(", ")+".":"В выбранных проектах таких нет."],
+   ["Поле «Тестировщик»","значение по умолчанию","У одного тестировщика задачи почти во всех проектах. Отчёт по QA точен, только если тестировщика назначают вручную."],
+   ["Группа тимлидов",TL.length+" чел.","Состав взят из JQL membersOf(\"adata-team-leads\"): видны только те, у кого были задачи за 180 дней."]];
+  $("notes").innerHTML=notes.map(([h,b,p])=>`<div class="note"><h3>${h}</h3><b class="big">${b}</b><p>${esc(p)}</p></div>`).join("");
+}
+
+
+// ---------- dashboards ----------
+function withCtl(ids,vals,fn){const old=ids.map(i=>{const e=$(i);return e.type=="checkbox"?e.checked:e.value});ids.forEach((i,k)=>{const e=$(i);e.type=="checkbox"?e.checked=vals[k]:e.value=vals[k]});try{return fn()}finally{ids.forEach((i,k)=>{const e=$(i);e.type=="checkbox"?e.checked=old[k]:e.value=old[k]})}}
+function renderDash(){
+  const P=scopedP(),T=sumOf(P,"t"),stuck=P.filter(p=>p.left<0).length;
+  const needN=Object.keys(PEOPLE).filter(needVisible),need0=needN.filter(n=>needInfo(n)==0).length;
+  const ab14=withCtl(["a-h","a-risk"],[14,false],absRows);
+  // top: critical need
+  const nr=needN.filter(n=>!PR.some(p=>p.lead==n)).map(n=>{const rows=PEOPLE[n].rows;return {n,pos:roleOf(n),q:needInfo(n),cr:sumRows(rows,"cr"),ts:sumRows(rows,"ts"),pr:[...new Set(rows.filter(r=>r.bl+r.wk+r.rw+r.cr+r.ts>0||inS(r.k)).map(r=>r.k))]}}).sort((a,b)=>a.q-b.q||a.cr+a.ts-(b.cr+b.ts)||a.n.localeCompare(b.n,"ru"));
+  $("dn-sub").textContent=nr.length?`${nr.length} чел. с ≤ ${$("n-th").value} задачами (бэклог + в работе + реворк), из них ${need0} совсем без задач. Руководители проектов не показаны. Первые 10 — самые незагруженные.`:"Сейчас всем хватает задач.";
+  $("tb-dneed").innerHTML="<thead><tr><th>Сотрудник</th><th>Роль</th><th class=n>Осталось</th><th class=n>Ревью/тест</th><th>Проекты</th></tr></thead><tbody>"+(nr.slice(0,10).map(a=>`<tr><td>${esc(a.n)}${(x=>x?` <span class="pill warn" title="Скоро отсутствует">${esc(absTxt(x))}</span>`:"")(absSoon(a.n,14))}</td><td class="sub">${esc(a.pos)}</td><td class=n>${a.q==0?'<span class="pill bad">0 · нет задач</span>':`<span class="pill warn">${a.q}</span>`}</td><td class=n>${nl(a.cr+a.ts,jq([who(a.n),"status not in (10100, 10011, 10000, 10001)"]))}</td><td>${a.pr.slice(0,3).map(k=>pl(k,jq([who(a.n),"project = \""+k+"\""]))).join(" ")}${a.pr.length>3?` <span class="sub">+${a.pr.length-3}</span>`:""}</td></tr>`).join("")||`<tr><td colspan=5 class="sub empty">Никого нет</td></tr>`)+"</tbody>";
+  // top: absent
+  const ar=ab14.sort((a,b)=>(b.now-a.now)||(a.fr<b.fr?-1:1));
+  $("da-sub").textContent=ar.length?`${ar.filter(a=>a.now).length} отсутствуют сейчас, ${ar.filter(a=>!a.now).length} — в ближайшие 14 дней. Отпуска — Bitrix, больничные и «отпросился» — Telegram.`:"Отсутствий нет.";
+  $("tb-dabs").innerHTML="<thead><tr><th>Сотрудник</th><th>Отсутствие</th><th class=n>Открытых задач</th><th>Риск</th></tr></thead><tbody>"+(ar.slice(0,12).map(a=>`<tr><td>${esc(a.n)}<div class="sub">${esc(a.pos)}</div></td><td><span class="pill ${a.now?"bad":"warn"}">${esc(absTxt(a))}</span></td><td class=n>${nl(a.q,jq([who(a.n),OPENQ]))}</td><td>${a.endRisk?'<span class="pill bad">конец спринта</span>':a.q?'<span class="pill warn">задачи висят</span>':'<span class="sub">—</span>'}</td></tr>`).join("")||`<tr><td colspan=4 class="sub empty">Никого нет</td></tr>`)+"</tbody>"+(ar.length>12?`<tfoot><tr><td colspan=4 class="sub">ещё ${ar.length-12} — на вкладке «Отсутствия»</td></tr></tfoot>`:"");
+}
+
+// leader summary
+const nmList=(arr,max=4)=>arr.length?`<div class="nm">${arr.slice(0,max).join("")}${arr.length>max?`<span class="sub">+${arr.length-max}</span>`:""}</div>`:`<span class="sub">—</span>`;
+const nameChip=(n,url,cls="mute",extra="")=>`<a class="pill ${cls}" href="${url}" target="_blank" rel="noopener" title="${esc(roleOf(n))}${extra?" · "+esc(extra):""}">${esc(n)}${extra?" · "+esc(extra):""}</a>`;
+function leadRows(){
+  const P=scopedP();const L={};P.forEach(p=>(L[p.lead]=L[p.lead]||[]).push(p));
+  const ab=withCtl(["a-h","a-risk"],[14,true],absRows);
+  return Object.entries(L).map(([l,ps])=>{const keys=ps.map(p=>p.k);const T=sumOf(ps,"t"),dn=sumOf(ps,"dn");
+    const tm=Math.round(ps.reduce((a,p)=>a+p.time*p.t,0)/Math.max(1,T));
+    const stuck=ps.filter(p=>p.left<0),lagP=ps.filter(p=>p.time-p.done>25),noNext=ps.filter(p=>(!NSD[p.k]||!NSD[p.k].t)&&p.left<=3);
+    const inK=n=>PEOPLE[n].rows.filter(r=>keys.includes(r.k));
+    const need=Object.keys(PEOPLE).filter(n=>needFlag(n)&&inK(n).length&&n!=l).sort((a,b)=>needInfo(a)-needInfo(b));
+    const over=Object.keys(PEOPLE).filter(n=>overFlag(n)&&inK(n).some(r=>r.bl));
+    const sw=Object.keys(PEOPLE).filter(n=>{const s=switchInfo(n);return s.flag&&s.stalled.some(g=>g.lead==l)});
+    const abs=ab.filter(x=>x.rk.some(r=>keys.includes(r.k)));
+    const risk=stuck.length*3+lagP.length*2+noNext.length+sumOf(ps,"blk")/5+abs.filter(x=>x.endRisk).length*2+sw.length;
+    return {l,ps,keys,T,dn,done:pct(dn,T),tm,stuck,lagP,noNext,blk:sumOf(ps,"blk"),need,over,sw,abs,risk};
+  });
+}
+table("tb-dlead",[
+ {h:"Руководитель",v:x=>x.l,f:x=>`<button class="lbtn" data-lead="${esc(x.l)}">${esc(x.l)}</button><div class="sub">${x.ps.length} ${x.ps.length==1?"проект":x.ps.length<5?"проекта":"проектов"}</div>`},
+ {h:"Проекты",v:x=>x.ps.length,f:x=>`<div class="dlpr">${x.keys.map(k=>pl(k,jq([`project = "${k}"`]))).join("")}</div>`},
+ {h:"Задач",v:x=>x.T,num:1,f:x=>nl(x.T,jq([`project in (${x.keys.map(k=>'"'+k+'"').join(", ")})`]))},
+ {h:"Готовность / время",v:x=>x.done-x.tm,num:1,tip:"Доля задач в «Готово» против прошедшего времени спринтов (взвешено по задачам). Красным — отставание больше 25 п.п.",f:x=>`<div style="display:flex;align-items:center;gap:8px;min-width:150px"><div class="bar" style="flex:1;position:relative"><i style="width:${x.done}%;background:var(--s-dn)"></i><span style="position:absolute;left:${x.tm}%;top:-3px;bottom:-3px;width:2px;background:var(--ink,#333)" title="Прошло времени ${x.tm}%"></span></div><b class="${x.tm-x.done>25?"hi":""}">${x.done}%</b><span class="sub">/ ${x.tm}%</span></div>`},
+ {h:"Риски по спринтам",v:x=>x.stuck.length*3+x.lagP.length*2+x.noNext.length,num:1,cls:"wrap",f:x=>[x.stuck.length?`<span class="pill bad" title="${x.stuck.map(p=>p.k).join(", ")}">не закрыто: ${x.stuck.map(p=>p.k).join(", ")}</span>`:"",x.lagP.length?`<span class="pill bad" title="Готовность отстаёт от времени больше 25 п.п.">отстают: ${x.lagP.map(p=>p.k).join(", ")}</span>`:"",x.noNext.length?`<span class="pill warn">нет след. спринта: ${x.noNext.map(p=>p.k).join(", ")}</span>`:"",x.blk?`<a class="pill bad" href="${jq([`project in (${x.keys.map(k=>'"'+k+'"').join(", ")})`,'status = "Blocked"'])}" target="_blank" rel="noopener">Blocked ${x.blk}</a>`:""].filter(Boolean).join(" ")||`<span class="pill ok">в норме</span>`},
+ {h:"Нужны задачи",v:x=>x.need.length,num:1,cls:"wrap",f:x=>nmList(x.need.map(n=>nameChip(n,jq([who(n)]),needInfo(n)==0?"bad":"warn",needInfo(n)==0?"0":String(needInfo(n)))))},
+ {h:"Отсутствуют",v:x=>x.abs.length,num:1,cls:"wrap",f:x=>nmList(x.abs.map(a=>nameChip(a.n,jq([who(a.n),OPENQ,`project in (${x.keys.map(k=>'"'+k+'"').join(", ")})`]),a.endRisk||a.now?"bad":"warn",absTxt(a))))},
+ {h:"Перегружены",v:x=>x.over.length,num:1,cls:"wrap",f:x=>nmList(x.over.map(n=>nameChip(n,jq([who(n),ST.bl]),"bad",blTotal(n)+" в бэклоге")))},
+ {h:"Тормозят его проекты",v:x=>x.sw.length,num:1,cls:"wrap",f:x=>nmList(x.sw.map(n=>nameChip(n,jq([who(n),ST.bl,`project in (${x.keys.map(k=>'"'+k+'"').join(", ")})`]),"bad")))}
+],leadRows,[4,"desc"]);
+$("tb-dlead").addEventListener("click",e=>{const b=e.target.closest("[data-lead]");if(!b)return;GLEAD=b.dataset.lead;$("g-lead").value=GLEAD;SEL.clear();buildMs();applyScope()});
+$("dash").addEventListener("click",e=>{const b=e.target.closest("[data-go]");if(b){show(b.dataset.go);scrollTo({top:0,behavior:"smooth"})}});
+
+// ---------- tooltip ----------
+const TT=document.createElement("div");TT.className="tt";TT.setAttribute("role","tooltip");TT.hidden=true;document.body.appendChild(TT);
+let tipEl=null,tipT=0;
+function tipShow(el){clearTimeout(tipT);if(tipEl===el&&!TT.hidden)return;tipEl=el;TT.innerHTML=switchTip(el.dataset.tipn);TT.hidden=false;const r=el.getBoundingClientRect(),w=TT.offsetWidth,h=TT.offsetHeight;
+  let x=Math.min(Math.max(8,r.left),innerWidth-w-8),y=r.bottom+4;if(y+h>innerHeight-8)y=Math.max(8,r.top-h-4);TT.style.left=x+"px";TT.style.top=y+"px"}
+function tipHide(){clearTimeout(tipT);TT.hidden=true;tipEl=null}
+const tipLater=()=>{clearTimeout(tipT);tipT=setTimeout(tipHide,350)};
+document.addEventListener("mouseover",e=>{const el=e.target.closest(".has-tip");if(el)tipShow(el);else if(TT.contains(e.target))clearTimeout(tipT)});
+document.addEventListener("mouseout",e=>{const from=e.target.closest(".has-tip")||(TT.contains(e.target)?TT:null);if(!from)return;const to=e.relatedTarget;if(to&&(TT.contains(to)||(tipEl&&tipEl.contains(to))))return;tipLater()});
+document.addEventListener("focusin",e=>{const el=e.target.closest(".has-tip");if(el)tipShow(el);else if(!TT.contains(e.target))tipHide()});
+document.addEventListener("click",e=>{if(TT.contains(e.target))return;const el=e.target.closest(".has-tip");if(el){tipEl===el&&!TT.hidden?tipHide():tipShow(el)}else tipHide()});
+addEventListener("scroll",e=>{if(!TT.contains(e.target))tipHide()},true);document.addEventListener("keydown",e=>{if(e.key=="Escape")tipHide()});
+
+function renderAll(){renderKpis();renderDash();Object.values(TABLES).forEach(d=>d());renderNotes()}
+
+// ---------- tabs ----------
+const secs=[...document.querySelectorAll("section")];
+$("tabs").innerHTML=secs.map(s=>`<button role="tab" data-id="${s.id}">${s.dataset.title}</button>`).join("");
+function show(id){secs.forEach(s=>s.hidden=s.id!==id);$("kpis").hidden=id=="dash";$("tabs").querySelectorAll("button").forEach(b=>b.setAttribute("aria-selected",b.dataset.id==id));try{localStorage.setItem("tab2",id)}catch(e){}}
+$("tabs").onclick=e=>{const b=e.target.closest("button");if(b)show(b.dataset.id)};
+buildMs();applyScope();
+let start="dash";const h=location.hash.slice(1);if(h&&$(h)&&$(h).tagName=="SECTION")start=h;
+show(start);
+
+(()=>{const s=document.querySelector('.stick');const f=()=>document.documentElement.style.setProperty('--stk',(s?s.offsetHeight:0)+'px');f();addEventListener('resize',f);if(window.ResizeObserver&&s)new ResizeObserver(f).observe(s)})();
+
+// ---------- refresh button (editors): request is queued in db, Claude picks it up within ~15 min ----------
+(async()=>{try{
+  const [user,db]=await Promise.all([claude.use("user"),claude.use("db")]);
+  if(!user||!db||!(await user.canEdit()))return;
+  const box=$("rf"),btn=$("rf-btn"),st=$("rf-st");box.hidden=false;
+  const tm=ms=>{const d=new Date(ms);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")};
+  let S={},P=[];const me=await user.id();
+  const paint=()=>{const pend=P.filter(r=>r.status=="pending");
+    if(S.running){btn.disabled=true;st.textContent="Идёт обновление с "+tm(S.runStartedAt)+", страница перезагрузится сама";return}
+    if(pend.length){btn.disabled=true;st.textContent="Запрос принят в "+tm(Math.min(...pend.map(r=>r.at)))+" · обновлю в течение ~15 минут (рабочее время пн–пт 9–19)";return}
+    btn.disabled=false;st.textContent=S.lastAt?"Последнее обновление по кнопке: "+tm(S.lastAt):""};
+  db.doc("refresh/state").onSnapshot(s=>{S=s.exists?s.data():{};paint()},()=>{});
+  db.collection("refresh/state/reqs").where("status","==","pending").onSnapshot(q=>{P=q.docs.map(d=>d.data());paint()},()=>{});
+  btn.onclick=async()=>{btn.disabled=true;st.textContent="Отправляю запрос…";
+    try{await db.collection("refresh/state/reqs").add({by:me,at:Date.now(),status:"pending"})}
+    catch(e){btn.disabled=false;st.textContent=e&&e.code=="quota_exceeded"?"Не удалось: хранилище запросов заполнено":"Не удалось отправить запрос, попробуйте ещё раз"}};
+}catch(e){}})();
+</script>

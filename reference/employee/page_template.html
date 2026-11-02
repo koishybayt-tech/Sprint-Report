@@ -1,0 +1,288 @@
+<title>Сотрудник Adata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: same system as «Спринты Adata» / «Посещаемость Adata» — list of people first, then one person's card: verdict, KPIs vs role, month charts, month table, tasks, attendance log */
+:root{
+  --bg:#f3f5f7;--surface:#ffffff;--line:#dde2e8;--fg:#18222d;--muted:#5d6b7a;
+  --accent:#1f5e8c;--accent-soft:#e3eef6;
+  --ok:#2f7d4f;--ok-soft:#e2f2e8;--warn:#a86412;--warn-soft:#fbefdc;--bad:#b23a3a;--bad-soft:#f8e3e3;
+  --c-done:#2f7d4f;--c-plan:#1f5e8c;--c-late:#c8562f;--c-off:#e3b27a;--grid:#e8ecf0;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11161c;--surface:#19212a;--line:#2a3541;--fg:#e4e9ee;--muted:#93a1b0;
+  --accent:#6fb0e0;--accent-soft:#1c3346;
+  --ok:#6cc48f;--ok-soft:#18332a;--warn:#e3a453;--warn-soft:#3a2b17;--bad:#ec7f7f;--bad-soft:#3d1f22;
+  --c-done:#6cc48f;--c-plan:#6fb0e0;--c-late:#e8845f;--c-off:#a77a45;--grid:#26313c;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c;--surface:#19212a;--line:#2a3541;--fg:#e4e9ee;--muted:#93a1b0;
+  --accent:#6fb0e0;--accent-soft:#1c3346;
+  --ok:#6cc48f;--ok-soft:#18332a;--warn:#e3a453;--warn-soft:#3a2b17;--bad:#ec7f7f;--bad-soft:#3d1f22;
+  --c-done:#6cc48f;--c-plan:#6fb0e0;--c-late:#e8845f;--c-off:#a77a45;--grid:#26313c;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body);padding:0 16px 48px;margin:0}
+header{padding-block:24px 12px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:18px;margin:0;font-weight:600;text-wrap:balance}
+h3{font-size:13px;margin:0;font-weight:600}
+.meta,.sub{color:var(--muted);font-size:12px}
+.lead{color:var(--muted);margin:0;max-width:110ch}
+a{color:var(--accent)}
+.xlink{font-size:13px;font-weight:600;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:3px 10px;background:var(--surface)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-block:1px solid var(--line);padding-block:10px}
+.tools label{color:var(--muted);font-size:13px;display:flex;gap:6px;align-items:center}
+input[type=search],select{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:0}
+input[type=search]{flex:1 1 220px;max-width:320px}
+.btn{font:600 13px var(--f-body);color:#fff;background:var(--accent);border:0;border-radius:6px;padding:7px 14px;cursor:pointer}
+.btn.ghost{color:var(--accent);background:var(--surface);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible,th:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section{display:flex;flex-direction:column;gap:10px;margin-top:22px;min-width:0}
+.tbl{overflow:auto;max-height:calc(100vh - 40px);background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none;position:sticky;top:0;z-index:2;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
+th[data-dir="asc"]::after{content:" ↑"}th[data-dir="desc"]::after{content:" ↓"}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:220px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--accent-soft)}
+tr.click{cursor:pointer}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.mute{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.hi{color:var(--bad);font-weight:600}.mid{color:var(--warn);font-weight:600}.good{color:var(--ok);font-weight:600}
+.key{font-family:var(--f-mono);font-size:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.prof{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:start}
+.prof .who{display:flex;flex-direction:column;gap:4px}
+.prof .who b{font-size:22px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font:12px var(--f-mono);border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--accent);text-decoration:none}
+.verdict{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.verdict li{display:flex;gap:8px;align-items:baseline}
+.verdict li::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--muted);transform:translateY(-1px)}
+.verdict li.ok::before{background:var(--ok)}.verdict li.warn::before{background:var(--warn)}.verdict li.bad::before{background:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{display:flex;flex-direction:column;gap:2px}
+.kpi b{font:600 22px var(--f-mono);font-variant-numeric:tabular-nums}
+.kpi .cmp{font-size:12px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
+svg text{fill:var(--muted);font:11px var(--f-body)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.spark{display:block}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+.toast{font-size:13px;color:var(--muted)}
+@media (max-width:640px){.prof{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header>
+  <h1>Сотрудник Adata</h1>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline"><span class="meta" id="meta"></span>
+    <a class="xlink" href="https://claude.ai/artifact/Wmmpst1gJXrdqxdG8BC6GA" target="_blank" rel="noopener">← Спринты Adata</a>
+    <a class="xlink" href="https://claude.ai/artifact/9wLovHH515cw2TxJNa95xE" target="_blank" rel="noopener">Посещаемость →</a></div>
+</header>
+
+<div class="tools">
+  <input type="search" id="q" list="names" placeholder="Найти сотрудника" aria-label="Сотрудник"><datalist id="names"></datalist>
+  <label for="f-pos">Роль</label><select id="f-pos"><option value="">Все роли</option></select>
+  <label><input type="checkbox" id="f-act" checked> Только с задачами или отметками в 2026</label>
+  <span style="flex:1"></span>
+  <button class="btn ghost" id="b-back" hidden>← Все сотрудники</button>
+  <button class="btn" id="b-xls" title="В карточке — книга по сотруднику с дэшбордом и графиками; в общем списке — книга по всем сотрудникам">Скачать Excel</button>
+  <span class="toast" id="xls-st" role="status"></span>
+</div>
+
+<div id="v-list">
+  <section>
+    <h2>Все сотрудники за 2026 год</h2>
+    <p class="lead">Задачи — из Jira (закрытые в 2026, по текущему исполнителю), посещаемость — из группы «Adata Group» с 01.01.2026. Нажмите на строку, чтобы открыть карточку сотрудника. «План спринта» — какая доля задач сотрудника в закрытых спринтах была закрыта в срок спринта.</p>
+    <div class="tbl"><table id="tb-all"></table></div>
+  </section>
+</div>
+
+<div id="v-one" hidden>
+  <section>
+    <div class="card prof" id="prof"></div>
+  </section>
+  <section>
+    <h2>Вывод</h2>
+    <ul class="verdict card" id="verdict"></ul>
+  </section>
+  <section>
+    <h2>Показатели за 2026 год</h2>
+    <p class="lead" id="kp-lead"></p>
+    <div class="kpis" id="kpis"></div>
+  </section>
+  <section>
+    <h2>Динамика по месяцам</h2>
+    <div class="charts">
+      <div class="card"><h3>Закрыто задач и выполнение плана спринта</h3><div class="legend"><span><i style="background:var(--c-done)"></i>Закрыто задач</span><span><i style="background:var(--c-plan)"></i>План спринта, %</span></div><div id="ch-work"></div></div>
+      <div class="card"><h3>Опоздания и отсутствия</h3><div class="legend"><span><i style="background:var(--c-late)"></i>Опоздания</span><span><i style="background:var(--c-off)"></i>Уходы, отлучки, целый день</span></div><div id="ch-att"></div></div>
+    </div>
+    <div class="tbl"><table id="tb-mon"></table></div>
+  </section>
+  <section>
+    <h2>Задачи 2026</h2>
+    <div class="tools" style="border:0;padding:0"><input type="search" id="q-t" placeholder="Поиск по задаче или проекту" aria-label="Поиск по задачам"><select id="f-t" aria-label="Показать"><option value="">Все задачи</option><option value="done">Закрытые</option><option value="open">Открытые</option><option value="rw">Возвращались на доработку</option><option value="carry">Переносились между спринтами</option><option value="bug">Ошибки</option></select><span class="sub" id="t-sum"></span></div>
+    <div class="tbl" style="max-height:520px"><table id="tb-t"></table></div>
+  </section>
+  <section>
+    <h2>Посещаемость: все отметки</h2>
+    <div class="tbl" style="max-height:420px"><table id="tb-a"></table></div>
+  </section>
+</div>
+
+<section>
+  <h2>Как считается</h2>
+  <p class="lead">Задачи 2026 — все задачи Jira, обновлявшиеся с 01.01.2026; закрытая задача засчитывается текущему исполнителю в месяц закрытия. «Возвраты» — переходы в Need Rework, засчитываются тому, кто был исполнителем в момент возврата. «Цикл» — медиана дней от начала работы до закрытия. «Переносы» — закрытые задачи, побывавшие больше чем в одном спринте. Опоздание — пропуск, начинающийся в 9:00; «целый день» — пропуск на весь рабочий день; больничные и отпуска по сообщениям в группе. Сравнение — с медианой сотрудников той же роли.</p>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/*DATA-START*/
+/*DATA*/
+/*DATA-END*/
+const JB="https://jira.adata.kz/";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const MN=["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
+const mlab=m=>MN[+m.slice(5,7)-1];
+const fmt=d=>d?d.slice(8,10)+"."+d.slice(5,7):"—";
+const pct=(a,b)=>b?Math.round(a*100/b):null;
+const med=a=>{a=a.filter(x=>x!=null&&!isNaN(x)).sort((x,y)=>x-y);if(!a.length)return null;const h=a.length>>1;return a.length%2?a[h]:(a[h-1]+a[h])/2};
+const hm=m=>m>=60?Math.floor(m/60)+" ч"+(m%60?" "+(m%60)+" мин":""):m+" мин";
+const MONS=EMP.mon;const CUR=MONS[MONS.length-1];
+const IX={done:0,bug:1,h:2,carry:3,plan:4,planDone:5,rw:6,cyc:7,rep:8,qa:9,late:10,early:11,mid:12,day:13,sick:14,min:15,lateStudy:16};
+const NAMES=Object.keys(EMP.ppl).sort((a,b)=>a.localeCompare(b,"ru"));
+$("meta").textContent="Данные на "+EMP.stamp.slice(8,10)+"."+EMP.stamp.slice(5,7)+"."+EMP.stamp.slice(0,4)+" "+EMP.stamp.slice(11,16)+" · Jira с 01.01.2026 · Adata Group с "+fmt("2026-"+EMP.att_from.slice(0,2)+"-"+EMP.att_from.slice(2,4));
+// ---- per person summary ----
+const sumM=(p,f,months)=>(months||MONS).reduce((a,m)=>a+(p.m[m]?(p.m[m][IX[f]]||0):0),0);
+const last3=MONS.slice(-4,-1).length?MONS.slice(-4,-1):MONS;// three full months before current
+function S(n){const p=EMP.ppl[n];if(p._s)return p._s;
+  const done=sumM(p,"done"),plan=sumM(p,"plan"),pd=sumM(p,"planDone"),rw=sumM(p,"rw"),bug=sumM(p,"bug"),carry=sumM(p,"carry");
+  const cyc=med(p.t.filter(t=>t[8]!=null&&t[5]).map(t=>t[8]));
+  const late=sumM(p,"late"),off=sumM(p,"early")+sumM(p,"mid"),day=sumM(p,"day"),sick=sumM(p,"sick"),mins=sumM(p,"min");
+  const actM=MONS.filter(m=>p.m[m]&&(p.m[m][0]||p.m[m][4]||p.m[m][10]||p.m[m][13]));
+  const firstM=actM[0]||null;const nM=firstM?MONS.length-MONS.indexOf(firstM):0;
+  const perM=nM?done/nM:0;
+  const r3=sumM(p,"done",last3)/last3.length,rPrev=sumM(p,"done",MONS.slice(0,Math.max(1,MONS.length-4)))/Math.max(1,MONS.length-4);
+  const l3=sumM(p,"late",last3)/last3.length,lPrev=sumM(p,"late",MONS.slice(0,Math.max(1,MONS.length-4)))/Math.max(1,MONS.length-4);
+  return p._s={done,plan,pd,planPct:pct(pd,plan),rw,rwPct:pct(rw,done),bug,carry,carryPct:pct(carry,done),cyc,late,off,day,sick,mins,perM,r3,rPrev,l3,lPrev,nM,h:Math.round(sumM(p,"h")),open:p.open[0]+p.open[1]}}
+const active=n=>{const s=S(n);return s.done||s.plan||s.late||s.off||s.day||s.sick||s.open};
+// role medians
+const ROLE={};NAMES.forEach(n=>{const r=EMP.ppl[n].pos||"—";(ROLE[r]=ROLE[r]||[]).push(n)});
+const rmed=(n,f)=>{const r=EMP.ppl[n].pos||"—";return med(ROLE[r].filter(x=>S(x).done>0||f=="late"||f=="perM").map(x=>S(x)[f]))};
+// ---- filters ----
+[...new Set(NAMES.map(n=>EMP.ppl[n].pos||"—"))].sort().forEach(r=>$("f-pos").insertAdjacentHTML("beforeend",`<option>${esc(r)}</option>`));
+$("names").innerHTML=NAMES.map(n=>`<option value="${esc(n)}">`).join("");
+// ---- sortable table helper ----
+function table(id,cols,rows,init,onRow){const el=$(id);let sk=init?init[0]:null,dir=init?init[1]:"desc";
+  function draw(){const r=[...rows()];if(sk!=null){const c=cols[sk],v=c.s||c.v;r.sort((a,b)=>{let x=v(a),y=v(b);if(x==null)x=-1e9;if(y==null)y=-1e9;return (typeof x=="string"?x.localeCompare(y,"ru"):x-y)*(dir=="asc"?1:-1)})}
+    el.innerHTML="<thead><tr>"+cols.map((c,i)=>`<th tabindex="0" class="${c.n?"n":""}" ${i===sk?`data-dir="${dir}"`:""} data-i="${i}" title="${esc(c.tip||"")}">${c.h}</th>`).join("")+"</tr></thead><tbody>"+
+    (r.length?r.map((x,i)=>`<tr${onRow?` class="click" tabindex="0" data-r="${i}"`:""}>`+cols.map(c=>`<td class="${c.n?"n":""} ${c.cls||""}">${c.f?c.f(x):esc(c.v(x)??"—")}</td>`).join("")+"</tr>").join(""):`<tr><td colspan="${cols.length}" class="empty">Ничего не найдено</td></tr>`)+"</tbody>";
+    el.querySelectorAll("th").forEach(th=>{const go=()=>{const i=+th.dataset.i;if(sk===i)dir=dir=="asc"?"desc":"asc";else{sk=i;dir=cols[i].n?"desc":"asc"}draw()};th.onclick=go;th.onkeydown=e=>{if(e.key=="Enter"){e.preventDefault();go()}}});
+    if(onRow)el.querySelectorAll("tbody tr.click").forEach(tr=>{const x=r[+tr.dataset.r];tr.onclick=()=>onRow(x);tr.onkeydown=e=>{if(e.key=="Enter")onRow(x)}});}
+  draw();return draw}
+const spark=(vals,w=90,h=22,col="var(--c-done)")=>{const mx=Math.max(1,...vals);const bw=w/vals.length;return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${vals.map((v,i)=>`<rect x="${i*bw+1}" y="${h-(v/mx)*(h-2)}" width="${bw-2}" height="${(v/mx)*(h-2)}" fill="${col}" opacity="${i==vals.length-1?1:.55}"></rect>`).join("")}</svg>`};
+const cls=(v,good,bad,inv)=>v==null?"":inv?(v>=bad?"hi":v>=good?"mid":""):(v<=bad?"hi":v<=good?"mid":"good");
+// ---- list view ----
+const listRows=()=>{const q=$("q").value.trim().toLowerCase(),r=$("f-pos").value,a=$("f-act").checked;return NAMES.filter(n=>(!q||n.toLowerCase().includes(q))&&(!r||(EMP.ppl[n].pos||"—")==r)&&(!a||active(n))).map(n=>({n,p:EMP.ppl[n],s:S(n)}))};
+const drawList=table("tb-all",[
+ {h:"Сотрудник",v:x=>x.n,f:x=>`<b>${esc(x.n)}</b>${x.p.lead?' <span class="pill mute">рук.</span>':""}${x.p.tl?' <span class="pill mute">тимлид</span>':""}<div class="sub">${esc(x.p.pos||"роль не указана")}</div>`},
+ {h:"Закрыто в 2026",v:x=>x.s.done,n:1},
+ {h:"Динамика",v:x=>x.s.r3-x.s.rPrev,tip:"Закрыто задач по месяцам",f:x=>spark(MONS.map(m=>x.p.m[m]?x.p.m[m][0]:0))},
+ {h:"В месяц, последние 3",v:x=>x.s.r3,n:1,f:x=>x.s.r3.toFixed(1)+(x.s.rPrev?` <span class="${x.s.r3<x.s.rPrev*.7?"hi":x.s.r3>x.s.rPrev*1.3?"good":"sub"}">${x.s.r3>=x.s.rPrev?"↑":"↓"}</span>`:"")},
+ {h:"План спринта",v:x=>x.s.planPct,n:1,tip:"Доля задач в закрытых спринтах, закрытых в срок спринта",f:x=>x.s.planPct==null?"—":`<span class="${cls(x.s.planPct,70,50)}">${x.s.planPct}%</span>`},
+ {h:"Возвраты",v:x=>x.s.rwPct,n:1,tip:"Возвратов на доработку на 100 закрытых задач",f:x=>x.s.rwPct==null?"—":`<span class="${cls(x.s.rwPct,15,30,1)}">${x.s.rwPct}%</span>`},
+ {h:"Цикл, дн.",v:x=>x.s.cyc,n:1,f:x=>x.s.cyc==null?"—":x.s.cyc},
+ {h:"Опозданий",v:x=>x.s.late,n:1,f:x=>x.s.late?`<span class="${cls(x.s.l3,1,4,1)}">${x.s.late}</span>`:"0"},
+ {h:"Опозд. в мес., посл. 3",v:x=>x.s.l3,n:1,f:x=>x.s.l3.toFixed(1)+(x.s.lPrev||x.s.l3?` <span class="${x.s.l3>x.s.lPrev*1.3&&x.s.l3>=1?"hi":x.s.l3<x.s.lPrev*.7?"good":"sub"}">${x.s.l3>x.s.lPrev?"↑":x.s.l3<x.s.lPrev?"↓":"="}</span>`:"")},
+ {h:"Отпросился",v:x=>x.s.off+x.s.day,n:1,tip:"Уходы раньше, отлучки и целые дни",f:x=>(x.s.off+x.s.day)+(x.s.day?` <span class="sub">(${x.s.day} дн.)</span>`:"")},
+ {h:"Пропущено",v:x=>x.s.mins,n:1,f:x=>x.s.mins?hm(x.s.mins):"—"},
+ {h:"Больничные",v:x=>x.s.sick,n:1},
+ {h:"Открыто сейчас",v:x=>x.s.open,n:1}
+],listRows,[1,"desc"],x=>open(x.n));
+// ---- profile ----
+let CURN=null,drawT=null;
+function open(n){CURN=n;$("v-list").hidden=true;$("v-one").hidden=false;$("b-back").hidden=false;$("q").value=n;
+  const p=EMP.ppl[n],s=S(n);try{history.replaceState(null,"","#"+(p.login||""))}catch(e){}
+  const pj=Object.entries(p.proj).slice(0,12);
+  $("prof").innerHTML=`<div class="who"><b>${esc(n)}</b><span class="sub">${esc(p.pos||"роль в Jira не указана")}${p.tl?" · тимлид":""}${p.lead?" · руководство":""}${p.login?" · "+esc(p.login):""}</span>
+   <div class="chips">${pj.map(([k,c])=>`<a class="chip" target="_blank" rel="noopener" href="${JB}issues/?jql=${encodeURIComponent(`project = ${k} AND assignee = "${p.login||n}" AND updated >= 2026-01-01 ORDER BY updated DESC`)}" title="${c} задач в 2026">${k} <span class="sub">${c}</span></a>`).join("")}</div></div>
+   <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">${p.login?`<a class="xlink" target="_blank" rel="noopener" href="${JB}issues/?jql=${encodeURIComponent(`assignee = "${p.login}" AND statusCategory != Done ORDER BY updated DESC`)}">Открытые задачи в Jira: ${s.open}</a>`:""}</div>`;
+  // KPIs vs role
+  const K=[["Закрыто задач",s.done,"done","",""],["В месяц (с первой активности)",+s.perM.toFixed(1),"perM","",""],["Выполнение плана спринта",s.planPct,"planPct","%",""],["Возвраты на доработку",s.rwPct,"rwPct","%","inv"],["Медиана цикла",s.cyc,"cyc"," дн.","inv"],["Переносы между спринтами",s.carryPct,"carryPct","%","inv"],["Опозданий",s.late,"late","","inv"],["Пропущено времени",s.mins,"mins","","inv"]];
+  $("kp-lead").textContent=`Сравнение с медианой роли «${p.pos||"—"}» (${(ROLE[p.pos||"—"]||[]).length} чел.). Зелёным — лучше медианы, красным — заметно хуже.`;
+  $("kpis").innerHTML=K.map(([l,v,f,u,inv])=>{const m=rmed(n,f);let c="sub",t="";if(v!=null&&m!=null&&m!==0){const better=inv?v<m:v>m;const far=inv?v>m*1.3:v<m*.7;c=better?"good":far?"hi":"sub";t=`медиана роли ${f=="mins"?hm(Math.round(m)):Math.round(m*10)/10+(u||"")}`}else if(m===0&&v){c=inv?"hi":"good";t="у роли обычно 0"}
+    return `<div class="card kpi"><span class="sub">${l}</span><b>${v==null?"—":f=="mins"?(v?hm(v):"0"):v+(u||"")}</b><span class="cmp ${c}">${t||"&nbsp;"}</span></div>`}).join("");
+  // verdict
+  const V=[];const r3=s.r3,rp=s.rPrev;
+  if(s.done==0&&!s.plan)V.push(["","В 2026 году закрытых задач в Jira нет — сотрудник не ведёт задачи в Jira или работает под другим исполнителем."]);
+  else{V.push([r3<rp*.7?"bad":r3>rp*1.3?"ok":"",`За последние 3 месяца закрывает ${r3.toFixed(1)} задач в месяц, раньше в среднем ${rp.toFixed(1)} — ${r3<rp*.7?"заметный спад":r3>rp*1.3?"рост":"без больших изменений"}.`]);
+    const rm=rmed(n,"perM");if(rm)V.push([s.perM<rm*.7?"warn":s.perM>rm*1.3?"ok":"",`Темп ${s.perM.toFixed(1)} задач в месяц против медианы роли ${rm.toFixed(1)}.`]);
+    if(s.planPct!=null)V.push([s.planPct<50?"bad":s.planPct<70?"warn":"ok",`Закрывает в срок спринта ${s.planPct}% своих задач (${s.pd} из ${s.plan}).`]);
+    if(s.rwPct!=null&&s.done>=5)V.push([s.rwPct>=30?"bad":s.rwPct>=15?"warn":"ok",`Возвратов на доработку: ${s.rw} (${s.rwPct} на 100 закрытых задач).`]);}
+  if(s.late||s.off||s.day){const lm=s.l3,lp=s.lPrev;V.push([lm>=4?"bad":lm>=1.5?"warn":"ok",`Опозданий за год: ${s.late}; за последние 3 месяца в среднем ${lm.toFixed(1)} в месяц (раньше ${lp.toFixed(1)}) — ${lm>lp*1.3&&lm>=1?"опаздывает чаще":lm<lp*.7?"опаздывает реже":"примерно так же"}.`]);
+    const rl=rmed(n,"late");if(rl!=null)V.push([s.late>rl*1.5&&s.late>3?"warn":"",`Медиана опозданий по роли за год — ${Math.round(rl)}.`]);
+    V.push(["",`Отпрашивался ${s.off+s.day} раз (из них целый день — ${s.day}), всего пропущено ${hm(s.mins)}; больничных по сообщениям — ${s.sick}.`]);}
+  else V.push(["ok","Опозданий и пропусков в группе «Adata Group» за 2026 год нет."]);
+  $("verdict").innerHTML=V.map(([c,t])=>`<li class="${c}">${esc(t)}</li>`).join("");
+  drawCharts(p);drawMonth(p);
+  drawT=table("tb-t",[
+   {h:"Задача",v:t=>t[0],f:t=>`<a class="key" href="${JB}browse/${t[0]}" target="_blank" rel="noopener">${t[0]}</a>`},
+   {h:"Название",v:t=>t[1],cls:"wrap"},{h:"Тип",v:t=>t[2]},{h:"Статус",v:t=>t[3],f:t=>`<span class="pill ${t[5]?"ok":"mute"}">${esc(t[3])}</span>`},
+   {h:"Создана",v:t=>t[4],f:t=>fmt(t[4])},{h:"Закрыта",v:t=>t[5]||"",f:t=>fmt(t[5])},
+   {h:"Спринтов",v:t=>t[6],n:1,f:t=>t[6]>1?`<span class="mid">${t[6]}</span>`:t[6]},
+   {h:"Возвратов",v:t=>t[7],n:1,f:t=>t[7]?`<span class="hi">${t[7]}</span>`:"0"},
+   {h:"Цикл, дн.",v:t=>t[8],n:1},{h:"Часы",v:t=>t[9],n:1,f:t=>t[9]||"—"}
+  ],taskRows,[5,"desc"]);
+  table("tb-a",[{h:"Дата",v:a=>a[0],f:a=>fmt(a[0])+"."+a[0].slice(0,4)},{h:"Что",v:a=>a[1],f:a=>`<span class="pill ${a[1]=="Опоздание"?"warn":a[1]=="Весь день"||a[1]=="Больничный"?"bad":"mute"}">${esc(a[1])}</span>`},{h:"Время",v:a=>a[2],n:1,f:a=>a[2]?hm(a[2]):"—"},{h:"Подробности",v:a=>a[3],cls:"wrap"}],()=>p.alog,[0,"desc"]);
+  scrollTo({top:0});}
+function taskRows(){const p=EMP.ppl[CURN],q=$("q-t").value.toLowerCase(),f=$("f-t").value;const r=p.t.filter(t=>(!q||(t[0]+" "+t[1]).toLowerCase().includes(q))&&(!f||(f=="done"?!!t[5]:f=="open"?!t[5]:f=="rw"?t[7]>0:f=="carry"?t[6]>1:t[2]=="Ошибка")));$("t-sum").textContent=r.length+" задач";return r}
+$("q-t").oninput=()=>drawT&&drawT();$("f-t").onchange=()=>drawT&&drawT();
+// ---- charts (inline SVG, one scale per chart) ----
+function bars(el,series,line,opts){const W=Math.max(320,el.clientWidth||520),H=196,L=30,R=line?34:8,T=18,B=24;const iw=W-L-R,ih=H-T-B,n=MONS.length,bw=iw/n;
+  const stack=MONS.map((m,i)=>series.reduce((a,s)=>a+s.v[i],0));const mx=Math.max(1,...stack);const step=mx<=5?1:mx<=10?2:mx<=25?5:mx<=50?10:mx<=100?20:50;const top=Math.ceil(mx/step)*step;
+  let g="";for(let v=0;v<=top;v+=step){const y=T+ih-v/top*ih;g+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${L-6}" y="${y+4}" text-anchor="end">${v}</text>`}
+  let b="";MONS.forEach((m,i)=>{let acc=0;series.forEach(s=>{const v=s.v[i];if(v){const h=v/top*ih;b+=`<rect x="${L+i*bw+bw*.18}" y="${T+ih-(acc+v)/top*ih}" width="${bw*.64}" height="${h}" fill="${s.c}"><title>${mlab(m)}: ${s.l} ${v}</title></rect>`;acc+=v}});
+    b+=`<text x="${L+i*bw+bw/2}" y="${H-6}" text-anchor="middle">${mlab(m)}</text>`;if(stack[i])b+=`<text x="${L+i*bw+bw/2}" y="${T+ih-stack[i]/top*ih-4}" text-anchor="middle" style="fill:var(--fg)">${stack[i]}</text>`});
+  let l="";if(line){const pts=line.v.map((v,i)=>v==null?null:[L+i*bw+bw/2,T+ih-v/100*ih]);for(let v=0;v<=100;v+=50){const y=T+ih-v/100*ih;l+=`<text x="${W-R+6}" y="${y+4}">${v}%</text>`}
+    let d="";pts.forEach((p,i)=>{if(!p)return;d+=(d&&pts[i-1]?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)});l+=`<path d="${d}" fill="none" stroke="${line.c}" stroke-width="2"/>`+pts.map((p,i)=>p?`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${line.c}"><title>${mlab(MONS[i])}: ${line.v[i]}%</title></circle>`:"").join("")}
+  el.innerHTML=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts||"")}">${g}${b}${l}</svg>`}
+function drawCharts(p){const M=MONS.map(m=>p.m[m]||[]);
+  bars($("ch-work"),[{l:"закрыто",c:"var(--c-done)",v:M.map(r=>r[0]||0)}],{c:"var(--c-plan)",v:M.map(r=>r[4]?Math.round(r[5]*100/r[4]):null)},"Закрыто задач по месяцам");
+  bars($("ch-att"),[{l:"опоздания",c:"var(--c-late)",v:M.map(r=>r[10]||0)},{l:"отпрашивался",c:"var(--c-off)",v:M.map(r=>(r[11]||0)+(r[12]||0)+(r[13]||0))}],null,"Опоздания по месяцам")}
+addEventListener("resize",()=>{if(CURN)drawCharts(EMP.ppl[CURN])});
+function drawMonth(p){const rows=MONS.map(m=>({m,r:p.m[m]||[]}));
+  table("tb-mon",[{h:"Месяц",v:x=>x.m,f:x=>mlab(x.m)+" "+x.m.slice(0,4)},{h:"Закрыто",v:x=>x.r[0],n:1},{h:"Ошибок",v:x=>x.r[1],n:1},{h:"План спринта",v:x=>x.r[4]?x.r[5]/x.r[4]:null,n:1,f:x=>x.r[4]?`${Math.round(x.r[5]*100/x.r[4])}% <span class="sub">${x.r[5]}/${x.r[4]}</span>`:"—"},{h:"Возвраты",v:x=>x.r[6],n:1},{h:"Переносы",v:x=>x.r[3],n:1},{h:"Цикл, дн.",v:x=>x.r[7],n:1},{h:"Часы",v:x=>x.r[2],n:1},{h:"Создал задач",v:x=>x.r[8],n:1},{h:"Протестировал",v:x=>x.r[9],n:1},
+   {h:"Опоздания",v:x=>x.r[10],n:1,f:x=>x.r[10]?`<span class="mid">${x.r[10]}</span>`:"0"},{h:"Ушёл раньше",v:x=>x.r[11],n:1},{h:"Отлучки",v:x=>x.r[12],n:1},{h:"Целый день",v:x=>x.r[13],n:1},{h:"Больничный",v:x=>x.r[14],n:1},{h:"Пропущено",v:x=>x.r[15],n:1,f:x=>x.r[15]?hm(x.r[15]):"—"}],()=>rows,[0,"asc"])}
+function back(){CURN=null;$("v-one").hidden=true;$("v-list").hidden=false;$("b-back").hidden=true;$("q").value="";try{history.replaceState(null,"","#")}catch(e){}drawList()}
+$("b-back").onclick=back;
+$("q").oninput=e=>{const v=e.target.value;if(EMP.ppl[v]){open(v);return}if(CURN&&v!==CURN){CURN=null;$("v-one").hidden=true;$("v-list").hidden=false;$("b-back").hidden=true}drawList()};
+$("f-pos").onchange=drawList;$("f-act").onchange=drawList;
+// ---- Excel ----
+let DL=null;(async()=>{try{DL=await claude.use("downloads")}catch(e){}if(!DL){$("b-xls").hidden=true}})();
+function sheetMonths(n){const p=EMP.ppl[n];return MONS.map(m=>{const r=p.m[m]||[];return {"Месяц":mlab(m)+" "+m.slice(0,4),"Закрыто задач":r[0]||0,"Ошибок закрыто":r[1]||0,"Задач в закрытых спринтах":r[4]||0,"Закрыто в срок спринта":r[5]||0,"План спринта, %":r[4]?Math.round(r[5]*100/r[4]):"","Возвраты на доработку":r[6]||0,"Переносы между спринтами":r[3]||0,"Медиана цикла, дн.":r[7]??"","Списано часов":r[2]||0,"Создал задач":r[8]||0,"Протестировал задач":r[9]||0,"Опоздания":r[10]||0,"Ушёл раньше":r[11]||0,"Отлучки":r[12]||0,"Целый день":r[13]||0,"Больничный":r[14]||0,"Пропущено, мин":r[15]||0}})}
+function sumRow(n){const p=EMP.ppl[n],s=S(n);return {"Сотрудник":n,"Роль":p.pos||"","Закрыто задач 2026":s.done,"Задач в месяц":+s.perM.toFixed(1),"В месяц, последние 3":+s.r3.toFixed(1),"План спринта, %":s.planPct??"","Возвраты на 100 задач":s.rwPct??"","Медиана цикла, дн.":s.cyc??"","Переносы, %":s.carryPct??"","Ошибок закрыто":s.bug,"Списано часов":s.h,"Опозданий":s.late,"Опозданий в мес., последние 3":+s.l3.toFixed(1),"Отпрашивался":s.off+s.day,"Целых дней":s.day,"Пропущено, мин":s.mins,"Больничных":s.sick,"Открыто сейчас":s.open}}
+$("b-xls").onclick=async()=>{if(!DL){$("xls-st").textContent="Скачивание недоступно в этом окне";return}
+  // готовая книга с дэшбордом (собирается при ежедневном обновлении)
+  try{const id=CURN?EMP.ppl[CURN].xid:"all";const r=await fetch("xb/"+id+".txt");if(r.ok){const b64=(await r.text()).trim();const bin=atob(b64);const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);const blob=new Blob([u8]);const fn0=CURN?"Сотрудник_"+CURN.replace(/\s+/g,"_")+"_"+EMP.stamp.slice(0,10)+".xlsx":"Сотрудники_Adata_"+EMP.stamp.slice(0,10)+".xlsx";$("xls-st").textContent="Подтвердите сохранение файла…";
+    try{await DL.save({filename:fn0,data:blob});$("xls-st").textContent="Файл сохранён: "+fn0}catch(e){$("xls-st").textContent=e&&e.code=="declined"?"Сохранение отменено":"Не удалось сохранить файл ("+(e&&e.code||"ошибка")+")"}return}}catch(e){}
+  const wb=XLSX.utils.book_new();let fn;
+  if(CURN){const n=CURN,p=EMP.ppl[n];
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([sumRow(n)]),"Сводка");
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sheetMonths(n)),"По месяцам");
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(p.t.map(t=>({"Задача":t[0],"Ссылка":JB+"browse/"+t[0],"Название":t[1],"Тип":t[2],"Статус":t[3],"Проект":t[10],"Создана":t[4],"Закрыта":t[5],"Спринтов":t[6],"Возвратов":t[7],"Цикл, дн.":t[8]??"","Часы":t[9]}))),"Задачи");
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(p.alog.map(a=>({"Дата":a[0],"Что":a[1],"Минут":a[2],"Подробности":a[3]}))),"Посещаемость");
+    fn="Сотрудник_"+n.replace(/\s+/g,"_")+"_"+EMP.stamp.slice(0,10)+".xlsx"}
+  else{if(!window.XLSX){$("xls-st").textContent="Не удалось загрузить файл";return}const rows=listRows().map(x=>sumRow(x.n));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Сотрудники");fn="Сотрудники_Adata_"+EMP.stamp.slice(0,10)+".xlsx"}
+  const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});$("xls-st").textContent="Подтвердите сохранение файла…";
+  try{await DL.save({filename:fn,data:new Blob([buf])});$("xls-st").textContent="Файл сохранён: "+fn}
+  catch(e){$("xls-st").textContent=e&&e.code=="declined"?"Сохранение отменено":"Не удалось сохранить файл ("+(e&&e.code||"ошибка")+")"}};
+// ---- start ----
+const h=location.hash.slice(1);const byLogin=NAMES.find(n=>EMP.ppl[n].login&&EMP.ppl[n].login==h);if(byLogin)open(byLogin);
+</script>

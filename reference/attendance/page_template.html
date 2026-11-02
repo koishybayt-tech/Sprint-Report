@@ -1,0 +1,409 @@
+<title>Посещаемость Adata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: same system as «Спринты Adata» — summary strip, then per-person table with a day grid, then the message journal */
+:root{
+  --bg:#f3f5f7;--surface:#ffffff;--line:#dde2e8;--fg:#18222d;--muted:#5d6b7a;
+  --accent:#1f5e8c;--accent-soft:#e3eef6;
+  --ok:#2f7d4f;--ok-soft:#e2f2e8;--warn:#a86412;--warn-soft:#fbefdc;--bad:#b23a3a;--bad-soft:#f8e3e3;
+  --study:#6a55b0;--study-soft:#ece8f7;
+  --h0:#eef1f4;--h1:#f6dfb8;--h2:#eba45e;--h3:#c8562f;--h4:#8f2b2b;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11161c;--surface:#19212a;--line:#2a3541;--fg:#e4e9ee;--muted:#93a1b0;
+  --accent:#6fb0e0;--accent-soft:#1c3346;
+  --ok:#6cc48f;--ok-soft:#18332a;--warn:#e3a453;--warn-soft:#3a2b17;--bad:#ec7f7f;--bad-soft:#3d1f22;
+  --study:#a996ec;--study-soft:#2a2442;
+  --h0:#222c36;--h1:#4a3a1f;--h2:#8a5a24;--h3:#b8562f;--h4:#e07a6a;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11161c;--surface:#19212a;--line:#2a3541;--fg:#e4e9ee;--muted:#93a1b0;
+  --accent:#6fb0e0;--accent-soft:#1c3346;
+  --ok:#6cc48f;--ok-soft:#18332a;--warn:#e3a453;--warn-soft:#3a2b17;--bad:#ec7f7f;--bad-soft:#3d1f22;
+  --study:#a996ec;--study-soft:#2a2442;
+  --h0:#222c36;--h1:#4a3a1f;--h2:#8a5a24;--h3:#b8562f;--h4:#e07a6a;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--f-body);padding:0 16px 48px;margin:0}
+header{padding-block:24px 12px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;justify-content:space-between}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:18px;margin:8px 0 0;font-weight:600}
+.meta{color:var(--muted);font-size:13px}
+.lead{color:var(--muted);margin:0;max-width:110ch}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-block:1px solid var(--line);padding-block:10px}
+.tools label{color:var(--muted);font-size:13px;display:flex;gap:6px;align-items:center}
+.tools input[type=search],.tools select{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:0}
+.tools input[type=search]{flex:1 1 200px;max-width:300px}
+.seg{display:inline-flex;max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{white-space:nowrap;font:500 13px var(--f-body);color:var(--muted);background:none;border:0;padding:6px 12px;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible,th:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-block:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.kpi b{font:600 24px var(--f-mono);font-variant-numeric:tabular-nums}
+.kpi span{color:var(--muted);font-size:12px}
+.kpi.bad b{color:var(--bad)}.kpi.ok b{color:var(--ok)}.kpi.warn b{color:var(--warn)}.kpi.study b{color:var(--study)}
+section{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+.tbl{overflow:auto;max-height:calc(100vh - 40px);background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none;position:sticky;top:0;z-index:2;background:var(--surface);box-shadow:inset 0 -1px 0 var(--line)}
+th[data-dir="asc"]::after{content:" ↑"}th[data-dir="desc"]::after{content:" ↓"}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:180px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--accent-soft)}
+.sub{color:var(--muted);font-size:12px}
+.hi{color:var(--bad);font-weight:600}.mid{color:var(--warn);font-weight:600}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.late{background:var(--warn-soft);color:var(--warn)}
+.pill.early,.pill.mid{background:var(--accent-soft);color:var(--accent)}
+.pill.day{background:var(--bad-soft);color:var(--bad)}
+.pill.sick{background:var(--bad-soft);color:var(--bad)}
+.pill.vac{background:var(--ok-soft);color:var(--ok)}
+.pill.study{background:var(--study-soft);color:var(--study)}
+.tag{font:600 10px var(--f-body);color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:0 4px;margin-left:6px;vertical-align:1px}
+.grid{display:flex;gap:3px}
+.grid i{display:block;width:14px;height:14px;border-radius:3px;background:var(--h0)}
+.grid i.w{outline:1px dashed var(--line);background:transparent}
+.grid i.s{background:var(--study-soft);box-shadow:inset 0 0 0 2px var(--study)}
+.grid i.x{background:var(--bad-soft);box-shadow:inset 0 0 0 2px var(--bad)}
+.grid i.v{background:var(--ok-soft);box-shadow:inset 0 0 0 2px var(--ok)}
+.pill.bs{background:var(--h0);color:var(--fg)}
+.pill.off{background:var(--accent-soft);color:var(--accent)}
+.l1{background:var(--h1)!important}.l2{background:var(--h2)!important}.l3{background:var(--h3)!important}.l4{background:var(--h4)!important}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center}
+.legend .grid{display:inline-flex;vertical-align:-3px;margin-right:4px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.note h3{margin:0 0 4px;font-size:14px}.note p{margin:0;color:var(--muted);font-size:13px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.two>section{min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+#cday .wrow{grid-template-columns:70px 1fr 120px}#crole .wrow{grid-template-columns:150px 1fr 120px}
+.ch{margin:0;font-size:13px;font-weight:600;color:var(--muted)}
+.wrow{display:grid;grid-template-columns:minmax(28px,max-content) 1fr 120px;gap:10px;align-items:center;font-size:13px}
+.wrow .b{height:14px;border-radius:3px;background:var(--h2);min-width:2px}
+.wrow .v{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted);text-align:right}
+a.nl{color:var(--accent);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 35%,transparent);text-underline-offset:3px}a.nl:hover{text-decoration-color:var(--accent)}a.nl.hi{color:var(--bad)}a.nl.mid{color:var(--warn)}
+.empty{padding:24px;color:var(--muted);text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:4px;overflow-x:auto}
+.tabs button{font:600 15px var(--f-body);color:var(--muted);background:none;border:0;border-bottom:3px solid transparent;padding:10px 16px;cursor:pointer;white-space:nowrap;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tabs button:hover{color:var(--fg)}
+.tabs .cnt{font:500 12px var(--f-mono);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:1px 7px;margin-left:6px}
+.panel[hidden]{display:none}
+.xlink{font:500 13px var(--f-body);color:var(--accent);text-decoration:none;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:4px 10px;white-space:nowrap}.xlink:hover{background:var(--accent-soft);border-color:var(--accent)}
+</style>
+
+<header>
+  <h1>Посещаемость Adata</h1>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:baseline"><span class="meta" id="meta"></span><a class="xlink" href="https://claude.ai/artifact/Wmmpst1gJXrdqxdG8BC6GA" target="_blank" rel="noopener">← Спринты Adata</a><a class="xlink" href="https://claude.ai/artifact/SwcyQGvBAyrE7yLfh4QZuy" target="_blank" rel="noopener">Сотрудник →</a></div>
+</header>
+<p class="lead">Опоздания, уходы раньше, отлучки и пропуски из группы Telegram «Adata Group». График 9:00–18:00, пн–пт. Учитывается только то, что сотрудник сам написал в группу.</p>
+
+<nav class="tabs" role="tablist" aria-label="Разделы">
+  <button type="button" role="tab" data-tab="today" id="tab-today">Сегодня</button>
+  <button type="button" role="tab" data-tab="stat">Статистика за период</button>
+</nav>
+<div class="tools" style="position:sticky;top:0;z-index:5;background:var(--bg)">
+  <input type="search" id="q" placeholder="Поиск ФИО" aria-label="Поиск по ФИО">
+  <select id="f-role" aria-label="Позиция"><option value="">Все позиции</option></select>
+  <select id="f-lead" aria-label="Руководитель"><option value="">Все руководители</option></select>
+  <select id="f-proj" aria-label="Проект"><option value="">Все проекты</option></select>
+  <button type="button" class="xlink" id="f-reset" hidden>Сбросить</button>
+</div>
+
+<div class="panel" data-panel="today">
+<section>
+  <h2 id="td-h">Сегодня</h2>
+  <p class="lead">Кто отпросился сегодня и на какое время, плюс кто сегодня в отпуске, на больничном или в БС. Не зависит от выбранного периода, фильтры применяются.</p>
+  <div class="tbl"><table id="tb-t"></table></div>
+</section>
+</div>
+
+<div class="panel" data-panel="stat">
+<section style="margin-top:12px">
+  <div class="tools" style="border:0;padding:0">
+    <div class="seg" id="per" role="group" aria-label="Период">
+      <button type="button" data-p="today">Сегодня</button>
+      <button type="button" data-p="week" aria-pressed="true">Эта неделя</button>
+      <button type="button" data-p="prev">Прошлая неделя</button>
+      <button type="button" data-p="all">Весь период</button>
+    </div>
+    <span class="meta" id="per-l"></span>
+    <label><input type="checkbox" id="st"> Считать учёбу по расписанию опозданием</label>
+  </div>
+</section>
+<div class="kpis" id="kpis"></div>
+
+<section>
+  <h2>Доля опаздывающих в коллективе</h2>
+  <p class="lead" id="coll-lead"></p>
+  <div class="kpis" id="ckpis" style="margin-block:0"></div>
+  <div class="two">
+    <div class="card"><h3 class="ch">По дням: % коллектива с опозданием</h3><div id="cday"></div></div>
+    <div class="card"><h3 class="ch">По ролям: % опоздавших хотя бы раз</h3><div id="crole"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>По сотрудникам</h2>
+  <div class="legend">
+    <span><span class="grid"><i></i></span>без отметок</span>
+    <span><span class="grid"><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i></span>до 30 мин · до 1 ч · до 2 ч · больше 2 ч</span>
+    <span><span class="grid"><i class="s"></i></span>учёба по расписанию</span>
+    <span><span class="grid"><i class="x"></i></span>целый день / больничный</span>
+    <span><span class="grid"><i class="v"></i></span>отпуск / БС</span>
+  </div>
+  <div class="tbl"><table id="tb-p"></table></div>
+</section>
+
+<section>
+  <h2>Отпуска, больничные и БС</h2>
+  <p class="lead" id="a-lead"></p>
+  <div class="kpis" id="akpis" style="margin-block:0"></div>
+  <div class="tools" style="border:0;padding:0"><div class="seg" id="a-t" role="group" aria-label="Тип"><button type="button" data-t="" aria-pressed="true">Все</button><button type="button" data-t="vac">Отпуск</button><button type="button" data-t="sick">Больничный</button><button type="button" data-t="bs">БС</button></div><label><input type="checkbox" id="a-up" checked> + предстоящие 30 дней</label></div>
+  <div class="tbl"><table id="tb-a"></table></div>
+</section>
+
+<div class="two">
+<section>
+  <h2>Опоздания по дням недели</h2>
+  <p class="lead">Сколько раз опаздывали и на сколько в сумме, за выбранный период.</p>
+  <div class="card" id="wd"></div>
+</section>
+<section>
+  <h2>Кто согласовывает</h2>
+  <p class="lead">Отсутствия, где в сообщении указан согласовавший.</p>
+  <div class="tbl"><table id="tb-ag"></table></div>
+</section>
+</div>
+
+<section>
+  <h2>План отработок</h2>
+  <p class="lead">Отработки с конкретной датой из сообщений: что обещано на сегодня и вперёд. Выполнение не проверяется — это список для контроля.</p>
+  <div class="tools" style="border:0;padding:0"><label><input type="checkbox" id="o-fut" checked> Только предстоящие</label></div>
+  <p class="lead" id="o-sum"></p>
+  <div class="tbl"><table id="tb-o"></table></div>
+</section>
+
+<section>
+  <h2>Журнал сообщений</h2>
+  <div class="tbl"><table id="tb-j"></table></div>
+</section>
+
+<section>
+  <h2>Как считается</h2>
+  <div class="notes">
+    <div class="note"><h3>Опоздание</h3><p>Пропуск, который начинается в 9:00. Минуты — от 9:00 до заявленного времени прихода. «Позже заявленного» — сотрудник ответил «upd» о приходе позже заявленного больше чем на 10 минут.</p></div>
+    <div class="note"><h3>Полдня и больше</h3><p>Отметки за день в сумме от 4 часов. Целый день — пропуск без времени или с 9:00 до 18:00.</p></div>
+    <div class="note"><h3>Под конец спринта</h3><p>Отметка попадает на последние 3 дня спринта проекта, где у сотрудника есть задачи в бэклоге, в работе или в реворке (по текущему срезу Jira).</p></div>
+    <div class="note"><h3>Учёба</h3><p>Причина «университет» или отработка «по расписанию». По умолчанию это согласованный график и в опоздания не входит.</p></div>
+    <div class="note"><h3>Чего здесь нет</h3><p>Кто опоздал и не написал в группу — не виден. Факта прихода по СКУД пока нет. Отработки показаны текстом, их выполнение не проверяется.</p></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+/*DATA*/
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const hm=m=>m==null?"":String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const dur=m=>!m?"—":m<60?m+" мин":(Math.floor(m/60)+" ч"+(m%60?" "+m%60+" мин":""));
+const durK=m=>m<60?m+" мин":(m/60).toFixed(1).replace(".0","").replace(".",",")+" ч";
+const D=s=>new Date(s+"T00:00:00");
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const WD=["вс","пн","вт","ср","чт","пт","сб"];
+const fmt=s=>{const d=D(s);return WD[d.getDay()]+" "+String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0")};
+const COLL=new Set(ATT.coll||[]),LEADS=new Set(ATT.lead||[]);
+const TODAY=ATT.stamp?ATT.stamp.slice(0,10):ATT.to;
+const TNAME={late:"Опоздание",early:"Ушёл раньше",mid:"Отлучка",day:"Целый день",sick:"Больничный",vac:"Отпуск"};
+let TAB="today";try{TAB=JSON.parse(localStorage.getItem("att")||"{}").TAB||"today"}catch(e){}
+function showTab(){document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab==TAB));document.querySelectorAll(".panel").forEach(p=>p.hidden=p.dataset.panel!=TAB)}
+let P="week",Q="",ST=false,OFUT=true,FR="",FL="",FP="",AT="",AUP=true;
+const ABS=ATT.abs||[];const ABSAT=(()=>{try{return JSON.parse(ATT.absAt||"{}")}catch(e){return{}}})();
+const ANAME={vac:"Отпуск",sick:"Больничный",bs:"БС (без содержания)"};
+const F=n=>(!Q||n.toLowerCase().includes(Q))&&(!FR||roleOf(n)==FR)&&(!FL||teamOf(n).includes(FL))&&(!FP||prAll(n).some(x=>x[0]==FP));
+const absOn=(r,d)=>r[2]<=d&&(r[3]||"9999")>=d;
+const wdays=(f,t)=>{let c=0;for(let d=D(f);iso(d)<=t;d.setDate(d.getDate()+1)){const w=d.getDay();if(w>0&&w<6)c++}return c};
+const dm2=s=>s?String(D(s).getDate()).padStart(2,"0")+"."+String(D(s).getMonth()+1).padStart(2,"0"):"";
+try{const s=JSON.parse(localStorage.getItem("att")||"{}");if(s.P)P=s.P;if(s.ST)ST=!!s.ST;FR=s.FR||"";FL=s.FL||"";FP=s.FP||""}catch(e){}
+function range(){const t=D(TODAY),dow=(t.getDay()+6)%7,mon=new Date(t);mon.setDate(t.getDate()-dow);
+  if(P=="today")return[TODAY,TODAY];
+  if(P=="week"){const f=new Date(mon);f.setDate(mon.getDate()+6);return[iso(mon),iso(f)]}
+  if(P=="prev"){const a=new Date(mon);a.setDate(mon.getDate()-7);const b=new Date(mon);b.setDate(mon.getDate()-1);return[iso(a),iso(b)]}
+  return[ATT.from_,TODAY]}
+function days(a,b){const out=[];const has=new Set(ATT.ev.map(e=>e.date));for(let d=D(a);iso(d)<=b&&iso(d)<=TODAY;d.setDate(d.getDate()+1)){const k=iso(d),w=d.getDay();if((w>0&&w<6)||has.has(k))out.push(k)}return out}
+const isStudy=e=>e.c=="study";
+const addD=(d,k)=>{const x=D(d);x.setDate(x.getDate()+k);return iso(x)};
+const prAll=n=>((ATT.ppl[n]||{}).pr||[]);const prOf=n=>prAll(n).filter(x=>x[2]>0);const JQ=(n,st)=>{const l=(ATT.ppl[n]||{}).login;return l?"https://jira.adata.kz/issues/?jql="+encodeURIComponent(`cf[10104] in openSprints() AND assignee = "${l}" AND ${st} ORDER BY status ASC, updated DESC`):null};
+const SQ={bl:"status = 10100",wk:"status = 10011",rw:"status = 10000",bk:'status = "Blocked"',all:'status in (10100, 10011, 10000, "Blocked")'};
+const sumF=(n,i)=>prAll(n).reduce((s,x)=>s+(x[i]||0),0);
+const lnk=(n,k,v,cls="")=>{const u=JQ(n,SQ[k]);return v?(u?`<a class="nl ${cls}" href="${u}" target="_blank" rel="noopener" title="Открыть в Jira">${v}</a>`:`<span class="${cls}">${v}</span>`):`<span class="sub">0</span>`};
+const roleOf=n=>((ATT.ppl[n]||{}).pos||"Роль не указана");
+const teamOf=n=>{const m={};prAll(n).forEach(x=>{if(x[3])m[x[3]]=(m[x[3]]||0)+(x[4]||0)});return Object.keys(m).sort((a,b)=>m[b]-m[a])};const openOf=n=>prOf(n).reduce((s,x)=>s+x[2],0);
+const endHit=e=>prOf(e.n).filter(([k,en,o])=>e.date>=addD(en,-2)&&e.date<=en);
+const noAg=e=>!e.ag&&!isStudy(e)&&(e.t=="day"||e.m>=120)&&e.t!="sick"&&e.t!="vac";
+const counts=e=>ST||!isStudy(e);
+function people(){const [a,b]=range();const ev=ATT.ev.filter(e=>e.date>=a&&e.date<=b&&F(e.n));
+  const by={};const mk=n=>by[n]=by[n]||{n,late:0,lateM:0,maxL:0,early:0,mid:0,half:0,day:0,study:0,after:0,sick:0,miss:0,dm:{},ds:{},dx:{},dv:{},ad:new Set(),noag:0,end:{}};
+  const dd=days(a,b);ABS.filter(r=>F(r[0])&&r[2]<=b&&(r[3]||"9999")>=a).forEach(r=>{const p=mk(r[0]);dd.forEach(d=>{if(absOn(r,d)){const w=D(d).getDay();if(w>0&&w<6)p.ad.add(d);p.dv[d]=r[1]}})});
+  ev.forEach(e=>{const p=mk(e.n);if(noAg(e))p.noag++;endHit(e).forEach(([k,en,o])=>{if(e.t!="sick"&&e.t!="vac")p.end[k]=[en,o]});
+    if(e.t=="sick"||e.t=="vac"){p.sick++;p.dx[e.date]=1;p.ad.add(e.date);return}
+    if(e.t=="day"){if(isStudy(e)&&!ST){p.study+=e.m;p.ds[e.date]=1}else{p.day++;p.dx[e.date]=1}return}
+    if(!counts(e)){p.study+=e.m;p.ds[e.date]=1;return}
+    p.miss+=e.m;p.dm[e.date]=(p.dm[e.date]||0)+e.m;
+    if(e.t=="late"){p.late++;p.lateM+=e.m;p.maxL=Math.max(p.maxL,e.m);if(e.arr!=null&&e.arr>e.b+10)p.after++}
+    else if(e.t=="early")p.early++;else p.mid++});
+  Object.values(by).forEach(p=>{p.half=Object.values(p.dm).filter(m=>m>=240).length;p.avg=p.late?Math.round(p.lateM/p.late):0;const i=ATT.ppl[p.n]||{};p.pos=i.pos||"";p.tl=i.tl;p.jira=i.jira;p.endK=Object.keys(p.end);p.open=(i.pr||[]).reduce((s,x)=>s+x[2],0);p.absD=p.ad.size});
+  return{list:Object.values(by),ev,a,b}}
+const lvl=m=>m>120?"l4":m>60?"l3":m>30?"l2":m>0?"l1":"";
+let sortP=[2,"desc"],sortJ=[0,"desc"],sortA=[1,"desc"],sortO=[0,"asc"];
+function table(id,cols,rows,sort,set){const el=$(id);const [si,dir]=sort;const c=cols[si];
+  rows=rows.slice().sort((x,y)=>{const a=c.v(x),b=c.v(y);const r=typeof a=="number"&&typeof b=="number"?a-b:String(a).localeCompare(String(b),"ru");return dir=="asc"?r:-r});
+  el.innerHTML="<thead><tr>"+cols.map((c,i)=>`<th tabindex="0" class="${c.num?"n":""}" ${i==si?`data-dir="${dir}"`:""} data-i="${i}" title="${esc(c.tip||"")}">${c.h}</th>`).join("")+"</tr></thead><tbody>"+
+   (rows.length?rows.map(r=>"<tr>"+cols.map(c=>`<td class="${c.num?"n":""}${c.cls?" "+c.cls:""}">${c.f?c.f(r):esc(c.v(r))}</td>`).join("")+"</tr>").join(""):`<tr><td class="empty" colspan="${cols.length}">За этот период сообщений нет</td></tr>`)+"</tbody>";
+  el.querySelectorAll("th").forEach(th=>{const go=()=>{const i=+th.dataset.i;set([i,i==si&&dir=="desc"?"asc":"desc"])};th.onclick=go;th.onkeydown=e=>{if(e.key=="Enter"||e.key==" "){e.preventDefault();go()}}})}
+let sortT=[2,"asc"],sortAb=[4,"asc"];
+function fillSel(){const add=(id,vals,cur)=>{const el=$(id);if(el.options.length<2)vals.forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;el.appendChild(o)});el.value=vals.includes(cur)?cur:"";return el.value};
+  const ns=Object.keys(ATT.ppl||{});const srt=a=>[...new Set(a)].filter(Boolean).sort((x,y)=>x.localeCompare(y,"ru"));
+  FR=add("f-role",srt(ns.map(n=>(ATT.ppl[n]||{}).pos)),FR);
+  FL=add("f-lead",srt(ns.flatMap(n=>prAll(n).map(x=>x[3]))),FL);
+  FP=add("f-proj",srt(ns.flatMap(n=>prAll(n).map(x=>x[0]))),FP)}
+const who=n=>`<b>${esc(n)}</b>${LEADS.has(n)?`<span class="tag">рук.</span>`:""}<div class="sub">${esc([roleOf(n)=="Роль не указана"?"":roleOf(n),teamOf(n)[0]?"рук. "+teamOf(n)[0]:""].filter(Boolean).join(" · "))}</div>`;
+function renderToday(){
+  const rows=ATT.ev.filter(e=>e.date==TODAY&&F(e.n)).map(e=>({n:e.n,k:isStudy(e)?"study":e.t,lbl:isStudy(e)?"Учёба":TNAME[e.t],s:e.a??(e.t=="day"?540:0),
+     time:e.a!=null?`${hm(e.a)}–${hm(e.b)}`:(e.t=="day"?"весь день":esc(e.txt||"")),m:e.t=="day"?480:e.m,rsn:e.rsn,otr:e.otr,ag:e.ag,arr:e.arr,b:e.b,post:e.post,src:"Telegram"}));
+  ABS.filter(r=>absOn(r,TODAY)&&F(r[0])&&!rows.some(x=>x.n==r[0]&&(x.k=="sick"||x.k=="vac"))).forEach(r=>rows.push({n:r[0],k:r[1],lbl:ANAME[r[1]],s:-1,time:`весь день · ${dm2(r[2])}–${r[3]?dm2(r[3]):"?"}`,m:480,rsn:r[5],otr:"",ag:"",arr:null,src:r[4]}));
+  {const c=new Set(rows.map(r=>r.n)).size;$("td-h").textContent=`Сегодня, ${fmt(TODAY)} · ${c} чел.`;$("tab-today").innerHTML=`Сегодня<span class="cnt">${c}</span>`}
+  table("tb-t",[
+    {h:"Сотрудник",v:r=>r.n,f:r=>who(r.n)},
+    {h:"Тип",v:r=>r.lbl,f:r=>`<span class="pill ${r.k}">${esc(r.lbl)}</span>`},
+    {h:"С — по",v:r=>r.s,tip:"Время отсутствия из сообщения; для отпуска/больничного — даты",f:r=>`<b>${r.time}</b>`},
+    {h:"Часов",v:r=>r.m,num:1,f:r=>r.s<0?"—":dur(r.m)},
+    {h:"Пришёл",v:r=>r.arr??-1,tip:"Время ответа «upd»",f:r=>r.arr!=null?`<span class="${r.arr>r.b+10?"hi":""}">${hm(r.arr)}</span>`:`<span class="sub">—</span>`},
+    {h:"Причина",v:r=>r.rsn,cls:"wrap",f:r=>esc(r.rsn)||`<span class="sub">не указана</span>`},
+    {h:"Отработка",v:r=>r.otr,cls:"wrap",f:r=>esc(r.otr)||`<span class="sub">—</span>`},
+    {h:"Согласовано",v:r=>r.ag,f:r=>r.ag?esc("@"+r.ag.split(",").join(", @")):`<span class="sub">—</span>`},
+    {h:"Источник",v:r=>r.src,f:r=>`<span class="sub">${r.src}${r.post?" · "+r.post:""}</span>`}
+  ],rows,sortT,s=>{sortT=s;render()})}
+function renderAbs(){const [a,b]=range();const lim=addD(TODAY,30);
+  const base=ABS.filter(r=>F(r[0]));
+  const now=t=>new Set(base.filter(r=>r[1]==t&&absOn(r,TODAY)).map(r=>r[0])).size;
+  const up=base.filter(r=>r[2]>TODAY&&r[2]<=lim);
+  const k=(v,l,c="")=>`<div class="kpi ${c}"><b>${v}</b><span>${l}</span></div>`;
+  $("akpis").innerHTML=k(now("vac"),"сейчас в отпуске","ok")+k(now("sick"),"сейчас на больничном","bad")+k(now("bs"),"сейчас в БС")+k(new Set(up.map(r=>r[0])).size,"уходят в ближайшие 30 дней","warn");
+  const st=ABSAT.bx?ABSAT.bx.replace("T"," ").slice(5).replace(/^(\d\d)-(\d\d)/,"$2.$1"):"—";
+  $("a-lead").textContent=`Отпуска и БС — из Bitrix (срез ${st}); больничные — из Bitrix и группы Telegram. Показаны записи за выбранный период${AUP?" и предстоящие 30 дней":""}.`;
+  document.querySelectorAll("#a-t button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.t==AT));$("a-up").checked=AUP;
+  const rows=base.filter(r=>(!AT||r[1]==AT)&&((r[2]<=b&&(r[3]||"9999")>=a)||(AUP&&r[2]>TODAY&&r[2]<=lim))).map(r=>{const to=r[3];const s=to&&to<TODAY?2:r[2]>TODAY?1:0;return{n:r[0],t:r[1],f:r[2],to,src:r[4],note:r[5],s,wd:to?wdays(r[2],to):null}});
+  table("tb-a",[
+    {h:"Сотрудник",v:r=>r.n,f:r=>who(r.n)},
+    {h:"Тип",v:r=>r.t,f:r=>`<span class="pill ${r.t}">${ANAME[r.t]}</span>`},
+    {h:"С",v:r=>r.f,f:r=>fmt(r.f)},
+    {h:"По",v:r=>r.to||"9999",f:r=>r.to?fmt(r.to):`<span class="sub">не указано</span>`},
+    {h:"Статус",v:r=>r.s+r.f,f:r=>r.s==0?`<span class="pill day">сейчас</span>`:r.s==1?`<span class="pill late">через ${Math.round((D(r.f)-D(TODAY))/864e5)} дн.</span>`:`<span class="sub">прошёл</span>`},
+    {h:"Раб. дней",v:r=>r.wd??0,num:1,f:r=>r.wd??"—"},
+    {h:"Открытых задач",v:r=>openOf(r.n),num:1,tip:"Бэклог + В работе + Реворк в открытых спринтах — кому передать на время отсутствия",f:r=>openOf(r.n)?lnk(r.n,"all",openOf(r.n),r.s<2?"mid":""):`<span class="sub">0</span>`},
+    {h:"Источник",v:r=>r.src,f:r=>`<span class="sub">${esc(r.src)}</span>`},
+    {h:"Примечание",v:r=>r.note,cls:"wrap",f:r=>esc(r.note)}
+  ],rows,sortAb,s=>{sortAb=s;render()})}
+function render(){
+  document.querySelectorAll("#per button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.p==P));$("st").checked=ST;
+  try{localStorage.setItem("att",JSON.stringify({P,ST,FR,FL,FP,TAB}))}catch(e){}
+  fillSel();$("f-reset").hidden=!(Q||FR||FL||FP);
+  renderToday();renderAbs();
+  const {list,ev,a,b}=people();const dd=days(a,b);$("per-l").textContent=a==b?fmt(a)+" · ниже всё за этот день":fmt(a)+" — "+fmt(b<TODAY?b:TODAY)+" · ниже всё за этот период";
+  const k=(v,l,c="")=>`<div class="kpi ${c}"><b>${v}</b><span>${l}</span></div>`;
+  const S=f=>list.reduce((s,p)=>s+f(p),0);
+  $("kpis").innerHTML=k(S(p=>p.late),"опозданий","warn")+k(durK(S(p=>p.lateM)),"сумма опозданий")+k(list.filter(p=>p.late>=3).length,"опаздывали 3+ раз","bad")+k(S(p=>p.half),"полдня и больше","bad")+k(S(p=>p.day),"целых дней")+k(S(p=>p.after),"пришли позже заявленного","bad")+k(list.filter(p=>p.endK.length).length,"отпрашивались под конец спринта","bad")+k(S(p=>p.noag),"от 2 ч без согласования","warn")+k(durK(S(p=>p.study)),"учёба по расписанию","study");
+  $("meta").textContent=`Сообщения ${fmt(ATT.from_)} — ${fmt(ATT.to)} · обновлено ${ATT.stamp.replace("T"," ").slice(5).replace(/^(\d\d)-(\d\d)/,"$2.$1")}`;
+  table("tb-p",[
+    {h:"Сотрудник",v:p=>p.n,f:p=>`<b>${esc(p.n)}</b>${LEADS.has(p.n)?`<span class="tag">рук.</span>`:p.tl?`<span class="tag">TL</span>`:""}<div class="sub">${esc(p.pos||(p.jira?"":"нет в Jira"))}</div>`},
+    {h:"По дням",v:p=>p.miss,tip:"Каждая клетка — рабочий день периода",f:p=>`<div class="grid">${dd.map(d=>{const m=p.dm[d]||0;const v=p.dv[d];const cl=p.dx[d]||v=="sick"?"x":v?"v":m?lvl(m):p.ds[d]?"s":"";return `<i class="${cl}" title="${fmt(d)}: ${v?ANAME[v]:p.dx[d]?"целый день / больничный":m?dur(m):p.ds[d]?"учёба":"нет отметок"}"></i>`}).join("")}</div>`},
+    {h:"Опозданий",v:p=>p.late,num:1,f:p=>`<span class="${p.late>=5?"hi":p.late>=3?"mid":""}">${p.late}</span>`},
+    {h:"Сумма",v:p=>p.lateM,num:1,tip:"Сумма опозданий",f:p=>dur(p.lateM)},
+    {h:"В среднем",v:p=>p.avg,num:1,f:p=>p.late?dur(p.avg):"—"},
+    {h:"Макс.",v:p=>p.maxL,num:1,f:p=>`<span class="${p.maxL>=120?"hi":p.maxL>=60?"mid":""}">${p.maxL?dur(p.maxL):"—"}</span>`},
+    {h:"Позже заявленного",v:p=>p.after,num:1,tip:"Ответ «upd» пришёл позже заявленного времени прихода больше чем на 10 минут",f:p=>p.after?`<span class="hi">${p.after}</span>`:"0"},
+    {h:"Ушёл раньше",v:p=>p.early,num:1},
+    {h:"Отлучки",v:p=>p.mid,num:1},
+    {h:"Полдня+",v:p=>p.half,num:1,tip:"Дни, где отметки в сумме от 4 часов",f:p=>p.half?`<span class="hi">${p.half}</span>`:"0"},
+    {h:"Целый день",v:p=>p.day,num:1},
+    {h:"Всего пропущено",v:p=>p.miss,num:1,f:p=>dur(p.miss)},
+    {h:"Учёба",v:p=>p.study,num:1,f:p=>p.study?`<span style="color:var(--study)">${dur(p.study)}</span>`:"—"},
+    {h:"Без согласования",v:p=>p.noag,num:1,tip:"Отсутствия от 2 часов (кроме учёбы), где не указано, кто согласовал",f:p=>p.noag?`<span class="mid">${p.noag}</span>`:"0"},
+    {h:"Под конец спринта",v:p=>p.endK.length,tip:"Отпрашивался в последние 3 дня спринта проекта, где у него есть незакрытые задачи",f:p=>p.endK.length?p.endK.map(k=>`<span class="pill day" title="Спринт до ${fmt(p.end[k][0])}, незакрытых задач: ${p.end[k][1]}">${k} · ${p.end[k][1]}</span>`).join(" "):`<span class="sub">—</span>`},
+    {h:"Открытых задач",v:p=>p.open,num:1,tip:"Бэклог + В работе + Реворк в открытых спринтах (Jira)",f:p=>p.open||`<span class="sub">0</span>`},
+    {h:"Отпуск / больн. / БС, дн.",v:p=>p.absD,num:1,tip:"Рабочие дни периода в отпуске, на больничном или в БС (Bitrix + Telegram)",f:p=>p.absD||`<span class="sub">0</span>`}
+  ],list,sortP,s=>{sortP=s;render()});
+  {const CS=new Set([...COLL].filter(F));const N=CS.size;const late=list.filter(p=>CS.has(p.n)&&p.late>0),late3=late.filter(p=>p.late>=3);
+   const pc=x=>N?Math.round(x/N*100):0;const wd=dd.filter(d=>{const w=D(d).getDay();return w>0&&w<6});
+   const hasD=new Set(ATT.ev.map(e=>e.date));const per=wd.map(d=>({d,no:!hasD.has(d),c:new Set(ev.filter(e=>e.date==d&&e.t=="late"&&counts(e)&&CS.has(e.n)).map(e=>e.n)).size}));
+   const okd=per.filter(x=>!x.no);const avg=okd.length?okd.reduce((s,x)=>s+x.c,0)/okd.length:0;
+   const lm=late.reduce((s,p)=>s+p.lateM,0),lc=late.reduce((s,p)=>s+p.late,0);
+   $("coll-lead").textContent=`Коллектив${CS.size<COLL.size?" (с учётом фильтров)":""} — ${N} сотрудников без руководящего состава (${[...LEADS].length} чел.). Считаются только опоздания${ST?", включая учёбу по расписанию":", без учёбы по расписанию"}.`;
+   const k2=(v,l,c="")=>`<div class="kpi ${c}"><b>${v}</b><span>${l}</span></div>`;
+   $("ckpis").innerHTML=k2(pc(late.length)+"%",`опоздали хотя бы раз · ${late.length} из ${N}`,"warn")+k2(pc(late3.length)+"%",`опаздывали 3+ раз · ${late3.length} чел.`,"bad")+k2(pc(avg)+"%",`опаздывают в средний день · ${avg.toFixed(1).replace(".",",")} чел.`)+k2(pc(N-late.length)+"%",`ни разу не опоздали · ${N-late.length} чел.`,"ok")+k2(lc?dur(Math.round(lm/lc)):"—","среднее опоздание");
+   const cmax=Math.max(1,...per.map(x=>x.c));
+   $("cday").innerHTML=per.length?per.map(x=>`<div class="wrow"><b>${fmt(x.d)}</b><div><div class="b" style="width:${x.c/cmax*100}%"></div></div><span class="v">${x.no?"нет данных":pc(x.c)+"% · "+x.c+" чел."}</span></div>`).join(""):`<div class="sub">В периоде нет рабочих дней с данными</div>`;
+   const R={};CS.forEach(n=>{const r=(ATT.cpos||{})[n]||"Роль не указана";const g=R[r]=R[r]||{r,n:0,l:0};g.n++;if(late.some(p=>p.n==n))g.l++});
+   $("crole").innerHTML=Object.values(R).sort((a,b)=>b.l/b.n-a.l/a.n).map(g=>`<div class="wrow"><b>${esc(g.r)}</b><div><div class="b" style="width:${g.l/g.n*100}%"></div></div><span class="v">${Math.round(g.l/g.n*100)}% · ${g.l} из ${g.n}</span></div>`).join("");}
+  const W=[1,2,3,4,5].map(i=>({i,c:0,m:0}));ev.filter(e=>e.t=="late"&&counts(e)).forEach(e=>{const w=D(e.date).getDay();if(w>=1&&w<=5){W[w-1].c++;W[w-1].m+=e.m}});
+  const wmax=Math.max(1,...W.map(w=>w.c));
+  $("wd").innerHTML=W.map(w=>`<div class="wrow"><b>${WD[w.i]}</b><div><div class="b" style="width:${w.c/wmax*100}%"></div></div><span class="v">${w.c} · ${durK(w.m)}</span></div>`).join("");
+  const AG={};ev.filter(e=>e.ag).forEach(e=>e.ag.split(",").forEach(a=>{const g=AG[a]=AG[a]||{a,c:0,m:0,ps:new Set()};g.c++;g.m+=e.t=="day"?480:e.m;g.ps.add(e.n)}));
+  table("tb-ag",[
+    {h:"Согласовал",v:g=>g.a,f:g=>"@"+esc(g.a)},
+    {h:"Отсутствий",v:g=>g.c,num:1},
+    {h:"Часов",v:g=>g.m,num:1,f:g=>durK(g.m)},
+    {h:"Сотрудников",v:g=>g.ps.size,num:1,f:g=>`<span title="${esc([...g.ps].join(", "))}">${g.ps.size}</span>`}
+  ],Object.values(AG),sortA,s=>{sortA=s;render()});
+  const OT=ATT.ev.filter(e=>e.od&&e.od>=addD(TODAY,-7)&&F(e.n)&&(!OFUT||e.od>=TODAY));
+  const otT=s=>{const m=(s||"").match(/(\d{1,2})[:.](\d{2})\s*[-–—]\s*(\d{1,2})[:.](\d{2})/);if(m)return m[1].padStart(2,"0")+":"+m[2]+"–"+m[3].padStart(2,"0")+":"+m[4];const s1=(s||"").match(/(?:с|после)\s*(\d{1,2})[:.](\d{2})/i);return s1?"с "+s1[1].padStart(2,"0")+":"+s1[2]:""};
+  const OG=Object.values(OT.reduce((g,e)=>{const k=e.n+"|"+e.od;const x=g[k]=g[k]||{n:e.n,od:e.od,items:[],m:0,otr:[],ag:new Set(),time:""};x.items.push(e);x.m+=e.t=="day"?480:e.m;if(e.otr&&!x.otr.includes(e.otr))x.otr.push(e.otr);(e.ag||"").split(",").filter(Boolean).forEach(a=>x.ag.add(a));if(!x.time)x.time=otT(e.otr);return g},{})).map(x=>({...x,ag:[...x.ag].join(",")}));
+  $("o-fut").checked=OFUT;
+  {const up=OG.filter(e=>e.od>=TODAY),zero=up.filter(e=>!openOf(e.n)),few=up.filter(e=>openOf(e.n)>0&&openOf(e.n)<=2);
+   $("o-sum").innerHTML=up.length?`Впереди отработок: <b>${up.length}</b> · без задач: <b class="${zero.length?"hi":""}">${zero.length}</b>${zero.length?" ("+[...new Set(zero.map(e=>esc(e.n)))].join(", ")+")":""} · 1–2 задачи: <b class="${few.length?"mid":""}">${few.length}</b>. Отработка обычно вне рабочего времени, тимлида рядом может не быть — задачи нужно выдать заранее.`:"Предстоящих отработок с датой нет."}
+  table("tb-o",[
+    {h:"Дата отработки",v:e=>(e.od>=TODAY?"0":"1")+(e.od>=TODAY?e.od:String(99999999-+e.od.replace(/-/g,""))),f:e=>`<span class="${e.od==TODAY?"mid":e.od<TODAY?"sub":""}">${fmt(e.od)}${e.od==TODAY?" · сегодня":e.od<TODAY?" · прошла":""}</span>`},
+    {h:"Время",v:e=>e.time||"~",tip:"Время отработки, если сотрудник его написал. Обычно после 18:00 или в субботу",f:e=>e.time?`<b>${e.time}</b>`:`<span class="sub">${D(e.od).getDay()==6?"суббота, ":""}не указано</span>`},
+    {h:"Сотрудник",v:e=>e.n,f:e=>esc(e.n)},
+    {h:"Роль",v:e=>roleOf(e.n),f:e=>roleOf(e.n)=="Роль не указана"?`<span class="sub">не указана</span>`:esc(roleOf(e.n))},
+    {h:"За что",v:e=>e.items[0].date,cls:"wrap",f:e=>e.items.map(x=>`${fmt(x.date)} · ${isStudy(x)?"учёба":TNAME[x.t].toLowerCase()} ${x.a!=null?hm(x.a)+"–"+hm(x.b):""}`).join("<br>")},
+    {h:"Часов",v:e=>e.m,num:1,f:e=>dur(e.m)},
+    {h:"Как написано",v:e=>e.otr.join("; "),cls:"wrap",f:e=>esc(e.otr.join("; "))},
+    {h:"Согласовано",v:e=>e.ag,f:e=>e.ag?esc("@"+e.ag.split(",").join(", @")):`<span class="sub">—</span>`},
+    {h:"Задач всего",v:e=>openOf(e.n),num:1,tip:"Бэклог + В работе + Реворк + Blocked в открытых спринтах (срез Jira). 0 — на отработке ему нечего делать",f:e=>{const o=openOf(e.n);return o?lnk(e.n,"all",o,o<=2?"mid":""):`<span class="pill day">нет задач</span>`}},
+    {h:"Бэклог",v:e=>sumF(e.n,5),num:1,f:e=>lnk(e.n,"bl",sumF(e.n,5))},
+    {h:"В работе",v:e=>sumF(e.n,6),num:1,f:e=>lnk(e.n,"wk",sumF(e.n,6))},
+    {h:"Реворк",v:e=>sumF(e.n,7),num:1,f:e=>lnk(e.n,"rw",sumF(e.n,7),"mid")},
+    {h:"Blocked",v:e=>sumF(e.n,8),num:1,tip:"Заблокированные задачи: на отработке их обычно не сделать без разблокировки",f:e=>lnk(e.n,"bk",sumF(e.n,8),"hi")},
+    {h:"Проекты",v:e=>prOf(e.n).length,cls:"wrap",f:e=>prOf(e.n).length?prOf(e.n).map(([k,en,o])=>`<span class="sub">${k} ${o}</span>`).join(" · "):`<span class="sub">—</span>`}
+  ],OG,sortO,s=>{sortO=s;render()});
+  table("tb-j",[
+    {h:"Дата",v:e=>e.date+e.post,f:e=>`${fmt(e.date)} <span class="sub">${e.post}</span>`},
+    {h:"Сотрудник",v:e=>e.n,f:e=>esc(e.n)},
+    {h:"Тип",v:e=>e.t,f:e=>`<span class="pill ${isStudy(e)?"study":e.t}">${isStudy(e)?"Учёба":TNAME[e.t]}</span>`+(endHit(e).length&&e.t!="sick"&&e.t!="vac"?` <span class="pill day" title="${endHit(e).map(([k,en,o])=>k+": спринт до "+fmt(en)+", незакрытых "+o).join("; ")}">конец спринта</span>`:"")+(noAg(e)?` <span class="pill late">без согласования</span>`:"")},
+    {h:"Время",v:e=>e.a??0,f:e=>e.a!=null?`${hm(e.a)}–${hm(e.b)}`:`<span class="sub">${esc(e.txt||"")}</span>`},
+    {h:"Минут",v:e=>e.m,num:1,f:e=>e.t=="sick"||e.t=="vac"?"—":dur(e.m)},
+    {h:"Пришёл",v:e=>e.arr??-1,f:e=>e.arr!=null?`<span class="${e.arr>e.b+10?"hi":""}">${hm(e.arr)}</span>`:`<span class="sub">—</span>`,tip:"Время ответа «upd»"},
+    {h:"Причина",v:e=>e.rsn,cls:"wrap",f:e=>esc(e.rsn)||`<span class="sub">не указана</span>`},
+    {h:"Отработка",v:e=>e.otr,cls:"wrap",f:e=>esc(e.otr)||`<span class="sub">—</span>`},
+    {h:"Согласовано",v:e=>e.ag,f:e=>e.ag?esc("@"+e.ag.split(",").join(", @")):`<span class="sub">—</span>`}
+  ],ev,sortJ,s=>{sortJ=s;render()});
+}
+document.querySelectorAll("#per button").forEach(b=>b.onclick=()=>{P=b.dataset.p;render()});
+$("q").oninput=e=>{Q=e.target.value.trim().toLowerCase();render()};
+$("st").onchange=e=>{ST=e.target.checked;render()};
+$("f-role").onchange=e=>{FR=e.target.value;render()};$("f-lead").onchange=e=>{FL=e.target.value;render()};$("f-proj").onchange=e=>{FP=e.target.value;render()};
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{TAB=b.dataset.tab;showTab();try{const s=JSON.parse(localStorage.getItem("att")||"{}");s.TAB=TAB;localStorage.setItem("att",JSON.stringify(s))}catch(e){}});showTab();
+$("f-reset").onclick=()=>{Q=FR=FL=FP="";$("q").value="";render()};
+document.querySelectorAll("#a-t button").forEach(b=>b.onclick=()=>{AT=b.dataset.t;render()});$("a-up").onchange=e=>{AUP=e.target.checked;render()};$("o-fut").onchange=e=>{OFUT=e.target.checked;render()};
+render();
+</script>

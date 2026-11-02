@@ -1,0 +1,68 @@
+name: adata-reports
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: reports
+      POSTGRES_USER: reports
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      TZ: Asia/Almaty
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reports -d reports"]
+      interval: 5s
+      retries: 20
+
+  api:
+    image: ${REGISTRY:-local}/adata-reports-api:${TAG:-latest}
+    build: { context: .., dockerfile: deploy/Dockerfile.api }
+    command: ["serve"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://reports:${POSTGRES_PASSWORD}@postgres:5432/reports?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/app/reports", "healthcheck"]
+      interval: 15s
+
+  worker:
+    image: ${REGISTRY:-local}/adata-reports-api:${TAG:-latest}
+    command: ["worker"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://reports:${POSTGRES_PASSWORD}@postgres:5432/reports?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    image: ${REGISTRY:-local}/adata-reports-web:${TAG:-latest}
+    build: { context: .., dockerfile: deploy/Dockerfile.web }
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: /api/v1
+      NUXT_PUBLIC_TG_BOT_USERNAME: ${TG_BOT_USERNAME}
+      NUXT_PUBLIC_JIRA_BASE: ${JIRA_BASE_URL}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?set in .env}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api, web]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
