@@ -30,18 +30,24 @@ type Sprint struct {
 
 // Issue — задача открытого спринта с полями, нужными для расчётов.
 type Issue struct {
-	Key         string
-	ProjectKey  string
-	ProjectName string
-	StatusID    string
-	StatusName  string
-	Type        string
-	Plan        string
-	Assignee    string // displayName, "" — не назначен
-	Created     time.Time
-	Updated     time.Time
-	TimespentS  int
-	Sprints     []Sprint // в порядке Jira
+	Key           string
+	ProjectKey    string
+	ProjectName   string
+	StatusID      string
+	StatusName    string
+	Type          string
+	Plan          string
+	Assignee      string // displayName, "" — не назначен
+	AssigneeLogin string
+	Tester        string // displayName поля «Тестировщик» (cf 10902)
+	TesterLogin   string
+	Position      string // cf 11101
+	Summary       string
+	Priority      string
+	Created       time.Time
+	Updated       time.Time
+	TimespentS    int
+	Sprints       []Sprint // в порядке Jira
 }
 
 type OldestOpen struct {
@@ -245,13 +251,15 @@ func dateNoon(d string) time.Time {
 
 // NextSprint — следующий спринт проекта (reference/sprints/ns_fetch.js).
 type NextSprint struct {
-	ProjectKey string  `json:"project_key"`
-	Current    string  `json:"current"`
-	NextID     *int64  `json:"next_id"`
-	NextName   *string `json:"next_name"`
-	NextStart  string  `json:"next_start,omitempty"`
-	NextEnd    string  `json:"next_end,omitempty"`
-	NextTotal  int     `json:"next_total"`
+	ProjectKey string      `json:"project_key"`
+	Current    string      `json:"current"`
+	NextID     *int64      `json:"next_id"`
+	NextName   *string     `json:"next_name"`
+	NextStart  string      `json:"next_start,omitempty"`
+	NextEnd    string      `json:"next_end,omitempty"`
+	NextTotal  int         `json:"next_total"`
+	Statuses   []NameCount `json:"statuses"` // задачи следующего спринта по статусам
+	By         []NameCount `json:"by"`       // и по исполнителям
 }
 
 var (

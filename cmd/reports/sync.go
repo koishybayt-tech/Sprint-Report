@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/adata/reports/internal/config"
 	"github.com/adata/reports/internal/db"
 	"github.com/adata/reports/internal/jira"
@@ -44,7 +46,11 @@ func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 		return err
 	}
 	defer pool.Close()
+	return syncJira(ctx, log, cfg, client, pool)
+}
 
+// syncJira — один полный проход синхронизации Jira; общий для команды sync и worker.
+func syncJira(ctx context.Context, log *slog.Logger, cfg config.Config, client *jira.Client, pool *pgxpool.Pool) error {
 	me, err := client.Myself(ctx)
 	if err != nil {
 		return fmt.Errorf("проверка токена Jira: %w", err)
@@ -55,7 +61,8 @@ func runSync(ctx context.Context, log *slog.Logger, args []string) error {
 	if err != nil {
 		return err
 	}
-	log.Info("sync jira: готово", "issues", st.Issues, "future_issues", st.FutureIssues, "projects", st.Projects, "sprints", st.Sprints,
-		"future_sprints", st.FutureSprints, "board_errors", st.BoardErrors, "took", time.Since(t0).Round(time.Second).String())
+	log.Info("sync jira: готово", "issues", st.Issues, "future_issues", st.FutureIssues, "projects", st.Projects,
+		"sprints", st.Sprints, "future_sprints", st.FutureSprints, "team_leads", st.TeamLeads,
+		"board_errors", st.BoardErrors, "took", time.Since(t0).Round(time.Second).String())
 	return nil
 }

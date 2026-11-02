@@ -12,6 +12,7 @@ import (
 	"github.com/adata/reports/internal/api"
 	"github.com/adata/reports/internal/config"
 	"github.com/adata/reports/internal/db"
+	"github.com/adata/reports/internal/jira"
 )
 
 func runServe(ctx context.Context, log *slog.Logger) error {
@@ -48,17 +49,47 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 	return nil
 }
 
+// runWorker синхронизирует Jira при старте и затем каждые JIRA_SYNC_EVERY (по умолчанию 15m).
+// Без JIRA_PAT синхронизация выключена, worker только пишет в лог, что жив.
 func runWorker(ctx context.Context, log *slog.Logger) error {
-	log.Info("worker: запущен")
-	t := time.NewTicker(time.Minute)
-	defer t.Stop()
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	client, err := jira.New(cfg.JiraBaseURL, cfg.JiraPAT)
+	if err != nil {
+		log.Warn("worker: синхронизация Jira выключена", "reason", err.Error())
+	}
+	log.Info("worker: запущен", "jira_sync_every", cfg.JiraSyncEvery.String())
+	runJira := func() {
+		if client == nil {
+			return
+		}
+		if err := syncJira(ctx, log, cfg, client, pool); err != nil && ctx.Err() == nil {
+			log.Error("worker: синхронизация Jira", "err", err)
+		}
+	}
+	runJira()
+
+	heartbeat := time.NewTicker(time.Minute)
+	defer heartbeat.Stop()
+	jiraTick := time.NewTicker(cfg.JiraSyncEvery)
+	defer jiraTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("worker: остановка")
 			return nil
-		case <-t.C:
+		case <-heartbeat.C:
 			log.Info("worker: жив")
+		case <-jiraTick.C:
+			runJira()
 		}
 	}
 }

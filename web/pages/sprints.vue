@@ -1,102 +1,197 @@
 <script setup lang="ts">
-// Отчёт «Спринты» — повторяет reference/sprints/page_template.html. Пока только вкладка «Статус спринтов».
-type Oldest = { key: string; age_days: number }
-type Project = {
-  key: string; name: string; lead: string; sprint: string; start?: string; end?: string; left_days: number | null
-  total: number; todo: number; wk: number; cr: number; rw: number; ts: number; dn: number
-  blocked: number; carry_open: number; people: number; ready_pct: number; oldest_open: Oldest | null
-}
-type Next = { project_key: string; next_id: number; next_name: string; next_total: number }
+// Отчёт «Спринты» — повторяет reference/sprints/page_template.html. Колонки вкладок перенесены оттуда 1-в-1.
+// Вкладки людей (загрузка, нужны задачи, перегружены, отсутствия…) — следующий этап.
+import { type ApiReport, type Col, type P, UNASSIGNED, buildModel, esc, fmt, jiraLinks, lvl, pct, sumOf } from '~/utils/sprints'
 
 const { apiBase, jiraBase } = useRuntimeConfig().public
-const JB = jiraBase.replace(/\/$/, '') + '/'
 const route = useRoute()
 const router = useRouter()
+const { data, error, pending } = await useFetch<ApiReport>(`${apiBase}/sprints/report`)
 
-const { data, error, pending } = await useFetch<{ updated_at: string | null; projects: Project[] }>(`${apiBase}/sprints`)
-const { data: nextData } = await useFetch<Next[]>(`${apiBase}/sprints/next`)
+const m = computed(() => data.value?.updated_at ? buildModel(data.value) : null)
 
-const all = computed(() => data.value?.projects ?? [])
-const NSD = computed(() => Object.fromEntries((nextData.value ?? []).map(n => [n.project_key, n])))
-
-// ---------- фильтр по руководителю (общий для всех вкладок, хранится в ?lead=) ----------
+// ---------- фильтр по руководителю и вкладка (в query-строке) ----------
 const lead = ref(String(route.query.lead ?? ''))
-watch(lead, l => router.replace({ query: { ...route.query, lead: l || undefined } }))
-const leads = computed(() => [...new Set(all.value.map(p => p.lead))].sort((a, b) => a.localeCompare(b, 'ru'))
-  .map(l => ({ l, n: all.value.filter(p => p.lead === l).length })))
-const scoped = computed(() => lead.value ? all.value.filter(p => p.lead === lead.value) : all.value)
+const TABS = [
+  ['sprint', 'Статус спринтов'], ['qa', 'Загрузка QA'], ['block', 'Узкие места'], ['stab', 'Стабильность'],
+  ['qual', 'Качество'], ['rel', 'Готовность к релизу'], ['next', 'Следующий спринт'], ['dq', 'Качество данных'],
+] as const
+const tab = ref(String(route.query.tab ?? 'sprint'))
+watch([lead, tab], ([l, t]) => router.replace({ query: { ...route.query, lead: l || undefined, tab: t === 'sprint' ? undefined : t } }))
 
-// ---------- помощники как в шаблоне ----------
-const fmt = (d?: string | null) => d ? `${d.slice(8, 10)}.${d.slice(5, 7)}` : '—'
-const pct = (a: number, b: number) => b ? Math.round(a / b * 100) : 0
-const lvl = (v: number, w: number, b: number) => v >= b ? 'hi' : v >= w ? 'mid' : ''
-const sum = (f: keyof Project) => scoped.value.reduce((a, p) => a + (p[f] as number), 0)
+const PR = computed(() => m.value?.PR ?? [])
+const leads = computed(() => [...new Set(PR.value.map(p => p.lead))].sort((a, b) => a.localeCompare(b, 'ru'))
+  .map(l => ({ l, n: PR.value.filter(p => p.lead === l).length })))
+const scopedP = computed(() => lead.value ? PR.value.filter(p => p.lead === lead.value) : PR.value)
+const scope = computed(() => new Set(scopedP.value.map(p => p.k)))
+const inS = (k: string) => scope.value.has(k)
+const L = computed(() => jiraLinks(jiraBase.replace(/\/$/, '') + '/', m.value!, () => [...scope.value]))
+
 const updated = computed(() => {
   const u = data.value?.updated_at
   if (!u) return ''
-  const d = new Date(u)
-  const p = (n: number) => String(n).padStart(2, '0')
+  const d = new Date(u), p = (n: number) => String(n).padStart(2, '0')
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
 })
 
-// ---------- ссылки в Jira ----------
-const BASE = 'cf[10104] in openSprints()'
-const ST = { open: 'status != 10001' }
-const jq = (parts: string[]) => JB + 'issues/?jql=' + encodeURIComponent([BASE, ...parts.filter(Boolean)].join(' AND ') + ' ORDER BY status ASC, updated DESC')
-const projQ = (k: string) => `project = "${k}"`
-const tasksLink = (k: string) => jq([projQ(k)])
-const carryLink = (k: string) => jq([projQ(k), 'cf[10104] in closedSprints()', ST.open])
-const nextLink = (id: number) => `${JB}issues/?jql=${encodeURIComponent('cf[10104] = ' + id)}`
-
-// ---------- KPI (только те, что считаются по проектам; остальные — с вкладками людей) ----------
+// ---------- KPI (по проектам; KPI по людям появятся вместе с их вкладками) ----------
 const kpis = computed(() => {
-  const P = scoped.value, T = sum('total')
-  const stuck = P.filter(p => (p.left_days ?? 0) < 0).length
-  const noNext = P.filter(p => !NSD.value[p.key]?.next_total)
+  const P = scopedP.value, T = sumOf(P, 't'), stuck = P.filter(p => p.left < 0).length, NSD = m.value!.NSD
   return [
-    { v: T, l: 'задач в спринтах', c: '' },
-    { v: P.length, l: 'проектов', c: '' },
-    { v: pct(sum('dn'), T) + '%', l: 'готово', c: '' },
-    { v: stuck, l: 'спринтов не закрыто', c: stuck ? 'bad' : '' },
-    { v: noNext.length, l: 'нет следующего спринта (или пустой)', c: noNext.some(p => (p.left_days ?? 99) <= 3) ? 'bad' : '' },
-    { v: sum('blocked'), l: 'в Blocked', c: 'bad' },
-    { v: sum('todo'), l: 'в бэклоге', c: '' },
+    [T, 'задач в спринтах', '', 'sprint'], [P.length, 'проектов', '', 'sprint'], [pct(sumOf(P, 'dn'), T) + '%', 'готово', '', 'rel'],
+    [stuck, 'спринтов не закрыто', stuck ? 'bad' : '', 'sprint'],
+    [P.filter(p => !NSD[p.k] || !NSD[p.k].t).length, 'нет следующего спринта (или пустой)', P.some(p => (!NSD[p.k] || !NSD[p.k].t) && p.left <= 3) ? 'bad' : '', 'next'],
+    [sumOf(P, 'blk'), 'в Blocked', 'bad', 'block'], [sumOf(P, 'bl'), 'в бэклоге', '', 'sprint'],
+  ] as [string | number, string, string, string][]
+})
+
+// ---------- общие ячейки ----------
+const projCell = (p: P) => `<b>${esc(p.k)}</b> <span class="sub">${esc(p.n)}</span>`
+const leadCell = (p: P) => `<span class="sub">${esc(p.lead)}</span>`
+const pq = (k: string) => `project = "${k}"`
+
+// ---------- 1 статус спринтов ----------
+const SEG = [['dn', 'Готово'], ['ts', 'Тестируется'], ['cr', 'Код ревью'], ['rw', 'Реворк'], ['wk', 'В работе'], ['bl', 'Бэклог']] as const
+const sprintCols = computed<Col<P>[]>(() => {
+  const { jq, nl, ST, JB } = L.value, NSD = m.value!.NSD
+  return [
+    { h: 'Проект', v: p => p.k, f: projCell },
+    { h: 'Руководитель', v: p => p.lead, f: leadCell },
+    { h: 'Спринт', v: p => p.sp, f: p => esc(p.sp) },
+    { h: 'Даты', v: p => p.en, f: p => `${fmt(p.st)} – ${fmt(p.en)}` },
+    { h: 'Срок', v: p => p.left, num: true, f: p => Number.isNaN(p.left) ? '<span class="sub">—</span>' : p.left < 0 ? `<span class="pill bad">Не закрыт · ${-p.left} дн.</span>` : p.left <= 3 ? `<span class="pill warn">${p.left} дн.</span>` : `<span class="pill mute">${p.left} дн.</span>` },
+    { h: 'Следующий спринт', v: p => NSD[p.k] ? (NSD[p.k].t ? 2 : 1) : 0, cls: 'wrap', tip: 'Есть ли в Jira следующий спринт (номер +1 к текущему) и сколько в нём задач. Подробнее — вкладка «Следующий спринт»',
+      f: p => { const n = NSD[p.k]; if (!n) return `<span class="pill ${p.left <= 3 ? 'bad' : 'mute'}">не создан</span>`; return (n.t ? `<span class="pill ok">есть</span> <a class="nl" href="${JB}issues/?jql=${encodeURIComponent('cf[10104] = ' + n.id)}" target="_blank" rel="noopener" title="${esc(n.name)}">${n.t} задач</a>` : `<span class="pill ${p.left <= 3 ? 'bad' : 'warn'}">пустой</span>`) + `<div class="sub">${esc(n.name)}</div>` } },
+    { h: 'Задач', v: p => p.t, num: true, f: p => nl(p.t, jq([pq(p.k)])) },
+    { h: 'Прогресс', v: p => p.done, f: p => `<div class="bar" title="${SEG.map(([k, l]) => l + ' ' + p[k]).join(' · ')}">${SEG.map(([k]) => `<i style="width:${p[k] / p.t * 100}%;background:var(--s-${k})"></i>`).join('')}</div>` },
+    { h: 'Готово', v: p => p.done, num: true, f: p => p.done + '%' },
+    { h: 'Самая старая задача', v: p => p.oAge, num: true, tip: 'Самая давно созданная незакрытая задача спринта: сколько дней назад создана', f: p => p.oKey ? `<a class="key" href="${JB}browse/${p.oKey}" target="_blank" rel="noopener">${p.oKey}</a> <span class="${lvl(p.oAge, 30, 90)}">${p.oAge} дн.</span>` : '<span class="sub">—</span>' },
+    { h: 'Переходят из спринта в спринт', v: p => p.carryOpen, num: true, tip: 'Незакрытые задачи, которые были минимум в 2 спринтах (перенесены из закрытого спринта)', f: p => nl(p.carryOpen, jq([pq(p.k), 'cf[10104] in closedSprints()', ST.open]), lvl(pct(p.carryOpen, p.t), 20, 40)) + (p.carryOpen ? ` <span class="sub">${pct(p.carryOpen, p.t)}%</span>` : '') },
+    { h: 'Люди', v: p => p.ppl, num: true },
   ]
 })
 
-// ---------- таблица «Статус спринтов» ----------
-const SEG = [['dn', 'Готово'], ['ts', 'Тестируется'], ['cr', 'Код ревью'], ['rw', 'Реворк'], ['wk', 'В работе'], ['todo', 'Бэклог']] as const
-const segVar = (k: string) => `var(--s-${k === 'todo' ? 'bl' : k})`
-type Col = { h: string; v: (p: Project) => string | number; num?: boolean; tip?: string; cls?: string }
-const cols: Col[] = [
-  { h: 'Проект', v: p => p.key },
-  { h: 'Руководитель', v: p => p.lead },
-  { h: 'Спринт', v: p => p.sprint },
-  { h: 'Даты', v: p => p.end ?? '' },
-  { h: 'Срок', v: p => p.left_days ?? Number.POSITIVE_INFINITY, num: true },
-  { h: 'Следующий спринт', v: p => NSD.value[p.key] ? (NSD.value[p.key].next_total ? 2 : 1) : 0, cls: 'wrap',
-    tip: 'Есть ли в Jira следующий спринт (номер +1 к текущему) и сколько в нём задач. Подробнее — вкладка «Следующий спринт»' },
-  { h: 'Задач', v: p => p.total, num: true },
-  { h: 'Прогресс', v: p => p.ready_pct },
-  { h: 'Готово', v: p => p.ready_pct, num: true },
-  { h: 'Самая старая задача', v: p => p.oldest_open?.age_days ?? 0, num: true,
-    tip: 'Самая давно созданная незакрытая задача спринта: сколько дней назад создана' },
-  { h: 'Переходят из спринта в спринт', v: p => p.carry_open, num: true,
-    tip: 'Незакрытые задачи, которые были минимум в 2 спринтах (перенесены из закрытого спринта)' },
-  { h: 'Люди', v: p => p.people, num: true },
+// ---------- QA ----------
+type Q = { n: string; t: number; tst: number; dn: number; pr: string[] }
+const qaRows = computed(() => { const M: Record<string, Q> = {}; m.value!.QX.forEach(r => { if (!inS(r.project_key)) return; const q = M[r.name] ??= { n: r.name, t: 0, tst: 0, dn: 0, pr: [] }; q.t += r.t; q.tst += r.tst; q.dn += r.dn; q.pr.push(r.project_key) }); return Object.values(M) })
+const qaCols = computed<Col<Q>[]>(() => {
+  const { jq, nl, who, projQ, projList, ST } = L.value
+  return [
+    { h: 'Тестировщик', v: q => q.n, f: q => esc(q.n) + (q.pr.length > 20 ? ' <span class="pill warn">похоже на значение по умолчанию</span>' : '') },
+    { h: 'Задач', v: q => q.t, num: true, f: q => nl(q.t, jq([who(q.n, 'cf[10902]'), projQ()])) },
+    { h: 'Сейчас в Test', v: q => q.tst, num: true, f: q => nl(q.tst, jq([who(q.n, 'cf[10902]'), projQ(), 'status = "Test"']), lvl(q.tst, 20, 40)) },
+    { h: 'Готово', v: q => q.dn, num: true, f: q => nl(q.dn, jq([who(q.n, 'cf[10902]'), projQ(), ST.dn])) },
+    { h: 'Проекты', v: q => q.pr.length, num: true, cls: 'wrap', f: q => projList(q.n, q.pr, 'cf[10902]') },
+  ]
+})
+
+// ---------- узкие места ----------
+type XB = { k: string; s: string; st: string; a: string; d: number; pr: string; p: string }
+const XP = computed<XB[]>(() => m.value!.X.map(x => ({ k: x.key, s: x.summary, st: x.status, a: x.assignee, d: x.days, pr: x.priority, p: x.key.split('-')[0] })))
+const blockSt = computed(() => [...new Set(XP.value.map(x => x.st))])
+const fSt = ref('')
+const qBlock = ref('')
+const blockRows = computed(() => XP.value.filter(x => inS(x.p) && (!fSt.value || x.st === fSt.value) && (!qBlock.value || (x.k + ' ' + x.s + ' ' + x.a).toLowerCase().includes(qBlock.value.toLowerCase()))))
+const stPill = (s: string) => `<span class="pill ${s === 'Blocked' ? 'bad' : s === 'Need Rework' || s === 'Требует уточнения' ? 'warn' : 'mute'}">${esc(s)}</span>`
+const blockCols = computed<Col<XB>[]>(() => [
+  { h: 'Ключ', v: x => x.k, f: x => `<a class="key" href="${L.value.JB}browse/${x.k}" target="_blank" rel="noopener">${x.k}</a>` },
+  { h: 'Задача', v: x => x.s, cls: 'wrap' },
+  { h: 'Статус', v: x => x.st, f: x => stPill(x.st) },
+  { h: 'Исполнитель', v: x => x.a },
+  { h: 'Руководитель', v: x => m.value!.LEAD(x.p), f: x => `<span class="sub">${esc(m.value!.LEAD(x.p))}</span>` },
+  { h: 'Без обновлений, дн.', v: x => x.d, num: true, f: x => `<span class="${lvl(x.d, 14, 30)}">${x.d}</span>` },
+  { h: 'Приоритет', v: x => x.pr, f: x => /высокий|Неотложный/.test(x.pr) ? `<span class="pill bad">${esc(x.pr)}</span>` : `<span class="sub">${esc(x.pr)}</span>` },
+])
+
+// ---------- стабильность / качество / релиз ----------
+const stabCols: Col<P>[] = [
+  { h: 'Проект', v: p => p.k, f: projCell }, { h: 'Руководитель', v: p => p.lead, f: leadCell },
+  { h: 'Задач', v: p => p.t, num: true },
+  { h: 'Перенесено', v: p => p.carry, num: true },
+  { h: '% перенесено', v: p => pct(p.carry, p.t), num: true, f: p => `<span class="${lvl(pct(p.carry, p.t), 40, 60)}">${pct(p.carry, p.t)}%</span>` },
+  { h: 'Добавлено после старта', v: p => p.add, num: true },
+  { h: '% добавлено', v: p => pct(p.add, p.t), num: true, f: p => `<span class="${lvl(pct(p.add, p.t), 40, 70)}">${pct(p.add, p.t)}%</span>` },
+  { h: 'Внеплановые', v: p => p.unpl, num: true },
+  { h: 'Без обновлений >14 дн.', v: p => p.stale, num: true, f: p => `<span class="${lvl(p.stale, 3, 10)}">${p.stale}</span>` },
 ]
-const sortKey = ref(4)
-const sortDir = ref<'asc' | 'desc'>('asc')
-function sortBy(i: number) {
-  if (sortKey.value === i) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
-  else { sortKey.value = i; sortDir.value = cols[i].num ? 'desc' : 'asc' }
+const qualCols = computed<Col<P>[]>(() => {
+  const { jq, nl, ST } = L.value
+  return [
+    { h: 'Проект', v: p => p.k, f: projCell }, { h: 'Руководитель', v: p => p.lead, f: leadCell },
+    { h: 'Задач', v: p => p.t, num: true },
+    { h: 'Ошибок', v: p => p.bug, num: true, f: p => nl(p.bug, jq([pq(p.k), 'issuetype = "Ошибка"'])) },
+    { h: 'Доля ошибок', v: p => pct(p.bug, p.t), num: true, f: p => `<span class="${lvl(pct(p.bug, p.t), 25, 40)}">${pct(p.bug, p.t)}%</span>` },
+    { h: 'Need Rework', v: p => p.rw, num: true, f: p => nl(p.rw, jq([pq(p.k), ST.rw]), 'mid') },
+    { h: 'Blocked', v: p => p.blk, num: true, f: p => nl(p.blk, jq([pq(p.k), 'status = "Blocked"']), 'hi') },
+  ]
+})
+const tstKind = (n: string) => { if (!n) return 'qa'; const r = m.value!.roleOf(n); return /QA|тест|test/i.test(r) ? 'qa' : /Project Manager|менеджер/i.test(r) ? 'pm' : 'ot' }
+const tstSplit = (k: string) => {
+  const o = { qa: { n: 0, who: [] as string[] }, pm: { n: 0, who: [] as string[] }, ot: { n: 0, who: [] as string[] } }
+  Object.entries(m.value!.TST[k] || {}).forEach(([n, v]) => { const g = o[tstKind(n)]; g.n += v.n; if (!n) g.who.push(''); else v.logins.forEach(l => g.who.push(l)) })
+  return o
 }
-const rows = computed(() => {
-  const c = cols[sortKey.value], k = sortDir.value === 'asc' ? 1 : -1
-  return [...scoped.value].sort((a, b) => {
-    const x = c.v(a), y = c.v(b)
-    return (typeof x === 'string' ? x.localeCompare(String(y), 'ru') : (x as number) - (y as number)) * k
-  })
+const tstJq = (k: string, who: string[]) => {
+  const l = who.filter(Boolean).map(x => '"' + x + '"'), un = who.includes('')
+  const a = l.length && un ? `(cf[10902] in (${l.join(', ')}) OR cf[10902] is EMPTY)` : l.length ? `cf[10902] in (${l.join(', ')})` : un ? 'cf[10902] is EMPTY' : ''
+  return L.value.jq([pq(k), 'status = "Test"', a])
+}
+const relFin = (p: P) => pct(p.dn + p.rdy + p.tst + p.cr, p.t)
+const relCols = computed<Col<P>[]>(() => {
+  const { jq, nl, ST } = L.value
+  return [
+    { h: 'Проект', v: p => p.k, f: projCell }, { h: 'Руководитель', v: p => p.lead, f: leadCell },
+    { h: 'Задач', v: p => p.t, num: true, f: p => nl(p.t, jq([pq(p.k)])) },
+    { h: 'Готовность спринта', v: p => p.done, num: true, tip: 'Доля задач спринта в статусе «Готово». Светлая часть полосы — задачи на финише (Code review, Test, Ready for deploy / Staging). Красным — если готовность отстаёт от прошедшего времени спринта больше чем на 25 п.п.',
+      f: p => { const fin = relFin(p), lag = p.time - p.done; return `<div style="display:flex;align-items:center;gap:8px;min-width:170px"><div class="bar" style="flex:1" title="Готово ${p.done}% · на финише ещё ${fin - p.done}% · прошло времени ${p.time}%"><i style="width:${p.done}%;background:var(--s-dn)"></i><i style="width:${fin - p.done}%;background:var(--s-dn);opacity:.35"></i></div><b class="${lag > 25 ? 'hi' : lag > 10 ? 'mid' : ''}" style="min-width:3.2em;text-align:right">${p.done}%</b></div>` + (fin > p.done ? `<span class="sub">с финишем ${fin}%</span>` : '') } },
+    { h: 'Code review', v: p => p.cr, num: true, f: p => nl(p.cr, jq([pq(p.k), ST.cr])) },
+    { h: 'На тесте у тестера', v: p => tstSplit(p.k).qa.n, num: true, tip: 'Задачи в статусе Test, поле «Тестировщик» — QA Engineer или пустое', f: p => { const x = tstSplit(p.k).qa; return nl(x.n, tstJq(p.k, x.who)) } },
+    { h: 'На тесте у PM', v: p => tstSplit(p.k).pm.n, num: true, tip: 'Задачи в статусе Test, поле «Тестировщик» — Project Manager', f: p => { const x = tstSplit(p.k).pm; return nl(x.n, tstJq(p.k, x.who), 'mid') } },
+    { h: 'На тесте у тимлида / остальных', v: p => tstSplit(p.k).ot.n, num: true, tip: 'Задачи в статусе Test, поле «Тестировщик» — тимлид или другой сотрудник (не QA и не PM)', f: p => { const x = tstSplit(p.k).ot; return nl(x.n, tstJq(p.k, x.who), x.n ? 'hi' : '') } },
+    { h: 'Ready for deploy / Staging', v: p => p.rdy, num: true, f: p => p.rdy ? `<b>${p.rdy}</b>` : '0' },
+    { h: 'Готово', v: p => p.dn, num: true },
+  ]
+})
+
+// ---------- следующий спринт ----------
+type NR = P & { ns: ReturnType<typeof buildModel>['NSD'][string] | undefined; carryN: number; idle: string[]; state: string; risk: boolean }
+const nextRows = computed<NR[]>(() => scopedP.value.map(p => {
+  const n = m.value!.NSD[p.k], carryN = p.t - p.dn
+  const ppl = Object.values(m.value!.PEOPLE).filter(Pp => Pp.n !== UNASSIGNED && Pp.rows.some(r => r.k === p.k && r.t > 0)).map(Pp => Pp.n)
+  const idle = n ? ppl.filter(x => !n.by[x]) : []
+  const state = !n ? 'none' : !n.t ? 'empty' : 'ok'
+  return { ...p, ns: n, carryN, idle, state, risk: state !== 'ok' && p.left <= 3 }
+}))
+const nsPill = (x: NR) => x.state === 'none' ? `<span class="pill ${x.risk ? 'bad' : 'mute'}">не создан</span>` : x.state === 'empty' ? `<span class="pill ${x.risk ? 'bad' : 'warn'}">пустой</span>` : '<span class="pill ok">готов</span>'
+const nextCols = computed<Col<NR>[]>(() => {
+  const { jq, jqs, nl, who } = L.value
+  return [
+    { h: 'Проект', v: p => p.k, f: projCell }, { h: 'Руководитель', v: p => p.lead, f: leadCell },
+    { h: 'Текущий до', v: p => p.left, num: true, tip: 'Дата окончания текущего спринта; красным — уже прошла', f: p => `${fmt(p.en)} <span class="${p.left < 0 ? 'hi' : p.left <= 3 ? 'mid' : 'sub'}">${p.left < 0 ? 'просрочен' : p.left === 0 ? 'сегодня' : 'ещё ' + p.left + ' дн.'}</span>` },
+    { h: 'Перейдёт', v: p => p.carryN, num: true, tip: 'Незакрытые задачи текущего спринта — перейдут в следующий, если не закрыть', f: p => nl(p.carryN, jq([pq(p.k), 'status != 10001']), p.left <= 3 && p.carryN ? 'mid' : '') },
+    { h: 'Следующий спринт', v: p => p.state === 'ok' ? 2 : p.state === 'empty' ? 1 : 0, cls: 'wrap', f: p => nsPill(p) + (p.ns ? ` <span>${esc(p.ns.name)}</span>` + (p.ns.st ? ` <span class="sub">${fmt(p.ns.st)}–${fmt(p.ns.en)}</span>` : ' <span class="sub">даты не заданы</span>') : '') },
+    { h: 'Запланировано', v: p => p.ns ? p.ns.t : -1, num: true, tip: 'Задач уже в следующем спринте', f: p => p.ns ? (p.ns.t ? `<a class="nl" href="${jqs(p.ns.id)}" target="_blank" rel="noopener">${p.ns.t}</a>` : '<span class="sub">0</span>') : '<span class="sub">—</span>' },
+    { h: 'Статусы', v: p => p.ns ? p.ns.t : 0, cls: 'wrap', f: p => p.ns && p.ns.t ? Object.entries(p.ns.ss).map(([s, c]) => `<span class="sub">${esc(s)} ${c}</span>`).join(' · ') : '<span class="sub">—</span>' },
+    { h: 'Исполнители в следующем', v: p => p.ns ? Object.keys(p.ns.by).length : 0, num: true, cls: 'wrap', f: p => p.ns && p.ns.t ? `<div class="plist">${Object.entries(p.ns.by).sort((a, b) => b[1] - a[1]).map(([n, c]) => `<a class="who wl" href="${jqs(p.ns!.id, [who(n)])}" target="_blank" rel="noopener">${esc(n)} <b>${c}</b></a>`).join('')}</div>` : '<span class="sub">—</span>' },
+    { h: 'Без задач в следующем', v: p => p.idle.length, num: true, cls: 'wrap', tip: 'Работают в текущем спринте проекта, а в следующем задач нет', f: p => p.ns ? (p.idle.length ? `<div class="plist"><b class="pc">${p.idle.length}</b>${p.idle.map(n => `<span class="who">${esc(n)}</span>`).join('')}</div>` : '<span class="sub">все с задачами</span>') : '<span class="sub">—</span>' },
+  ]
+})
+const nsSum = computed(() => {
+  const r = nextRows.value, riskNone = r.filter(x => x.risk && x.state === 'none').length
+  return `<span>Следующий создан: <b>${r.filter(x => x.ns).length}</b> из ${r.length}</span><span>Не создан, а текущий кончается ≤3 дн. или просрочен: <b class="${riskNone ? 'hi' : ''}">${riskNone}</b></span><span>Пустых: <b>${r.filter(x => x.state === 'empty').length}</b></span><span>Перейдёт задач: <b>${sumOf(r, 'carryN')}</b></span><span>Людей без задач в следующем: <b>${r.reduce((s, x) => s + x.idle.length, 0)}</b></span>`
+})
+
+// ---------- качество данных (тексты карточек — из текущего дашборда) ----------
+const notes = computed(() => {
+  const P = scopedP.value, T = sumOf(P, 't'), stuck = P.filter(p => p.left < 0)
+  return [
+    ['Оценки времени', '0 из ' + T, 'Ни у одной задачи нет первоначальной оценки. План/факт и burndown по часам построить нельзя.'],
+    ['Срок исполнения (duedate)', 'не заполнен', 'Без сроков нельзя посчитать просрочки по задачам.'],
+    ['Списание времени', Math.round(sumOf(P, 'h')).toLocaleString('ru') + ' ч', 'Время списывают не во всех проектах; для отчёта по трудозатратам данных мало.'],
+    ['Незакрытые спринты', stuck.length + '', stuck.length ? 'Даты прошли, но спринты активны: ' + stuck.map(p => p.k).join(', ') + '.' : 'В выбранных проектах таких нет.'],
+    ['Поле «Тестировщик»', 'значение по умолчанию', 'У одного тестировщика задачи почти во всех проектах. Отчёт по QA точен, только если тестировщика назначают вручную.'],
+    ['Группа тимлидов', m.value!.TL.length + ' чел.', 'Состав взят из JQL membersOf("adata-team-leads"): видны только те, у кого были задачи за 180 дней.'],
+  ]
 })
 </script>
 
@@ -114,93 +209,85 @@ const rows = computed(() => {
             <option v-for="o in leads" :key="o.l" :value="o.l">{{ o.l }} ({{ o.n }})</option>
           </select>
         </label>
-        <span v-if="lead" class="scope">В фильтре: {{ scoped.length }} проектов · {{ sum('total') }} задач</span>
+        <span v-if="lead" class="scope">В фильтре: {{ scopedP.length }} проектов · {{ sumOf(scopedP, 't') }} задач</span>
       </div>
       <nav role="tablist">
-        <button role="tab" aria-selected="true">Статус спринтов</button>
+        <button v-for="[id, title] in TABS" :key="id" role="tab" :aria-selected="tab === id" @click="tab = id">{{ title }}</button>
       </nav>
     </div>
 
     <p v-if="pending" class="sub">Загружаю…</p>
     <div v-else-if="error" class="notice">Не удалось получить данные: {{ error.statusCode ? `HTTP ${error.statusCode}` : error.message }}</div>
-    <div v-else-if="!data?.updated_at" class="notice">
-      Данных Jira ещё нет. Запустите синхронизацию: <code>reports sync jira --full</code>
+    <div v-else-if="!m" class="notice">
+      Данных Jira ещё нет. Запустите синхронизацию: <code>reports sync jira --full</code> (worker делает это сам, если задан JIRA_PAT).
     </div>
     <template v-else>
       <div class="kpis">
-        <div v-for="k in kpis" :key="k.l" class="kpi" :class="k.c"><b>{{ k.v }}</b><span>{{ k.l }}</span></div>
+        <button v-for="[v, l, c, go] in kpis" :key="l" class="kpi" :class="c" style="font:inherit;color:inherit;text-align:left;cursor:pointer" @click="tab = go"><b>{{ v }}</b><span>{{ l }}</span></button>
       </div>
 
-      <section>
+      <section v-if="tab === 'sprint'">
         <h2>Статус спринтов</h2>
         <p class="lead">Прогресс каждого активного спринта по статусам. Спринт, чья дата окончания прошла, но он не закрыт в Jira, отмечен «Не закрыт».</p>
         <div class="legend">
-          <span v-for="[k, l] in SEG" :key="k"><i :style="{ background: segVar(k) }" />{{ l }}</span>
+          <span v-for="[k, l] in SEG" :key="k"><i :style="{ background: `var(--s-${k})` }" />{{ l }}</span>
         </div>
-        <div class="tbl">
-          <table>
-            <thead>
-              <tr>
-                <th v-for="(c, i) in cols" :key="c.h" tabindex="0" :class="{ n: c.num }" :title="c.tip"
-                    :data-dir="i === sortKey ? sortDir : undefined" @click="sortBy(i)" @keydown.enter.prevent="sortBy(i)">{{ c.h }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in rows" :key="p.key">
-                <td><b>{{ p.key }}</b> <span class="sub">{{ p.name }}</span></td>
-                <td><span class="sub">{{ p.lead }}</span></td>
-                <td>{{ p.sprint }}</td>
-                <td>{{ fmt(p.start) }} – {{ fmt(p.end) }}</td>
-                <td class="n">
-                  <span v-if="p.left_days === null" class="sub">—</span>
-                  <span v-else-if="p.left_days < 0" class="pill bad">Не закрыт · {{ -p.left_days }} дн.</span>
-                  <span v-else-if="p.left_days <= 3" class="pill warn">{{ p.left_days }} дн.</span>
-                  <span v-else class="pill mute">{{ p.left_days }} дн.</span>
-                </td>
-                <td class="wrap">
-                  <span v-if="!NSD[p.key]" class="pill" :class="(p.left_days ?? 99) <= 3 ? 'bad' : 'mute'">не создан</span>
-                  <template v-else>
-                    <template v-if="NSD[p.key].next_total">
-                      <span class="pill ok">есть</span>{{ ' ' }}
-                      <a class="nl" :href="nextLink(NSD[p.key].next_id)"
-                         target="_blank" rel="noopener" :title="NSD[p.key].next_name">{{ NSD[p.key].next_total }} задач</a>
-                    </template>
-                    <span v-else class="pill" :class="(p.left_days ?? 99) <= 3 ? 'bad' : 'warn'">пустой</span>
-                    <div class="sub">{{ NSD[p.key].next_name }}</div>
-                  </template>
-                </td>
-                <td class="n">
-                  <a v-if="p.total" class="nl" :href="tasksLink(p.key)"
-                     target="_blank" rel="noopener" title="Открыть в Jira">{{ p.total }}</a>
-                  <span v-else class="sub">0</span>
-                </td>
-                <td>
-                  <div class="bar" :title="SEG.map(([k, l]) => `${l} ${p[k]}`).join(' · ')">
-                    <i v-for="[k] in SEG" :key="k" :style="{ width: `${p[k] / p.total * 100}%`, background: segVar(k) }" />
-                  </div>
-                </td>
-                <td class="n">{{ p.ready_pct }}%</td>
-                <td class="n">
-                  <template v-if="p.oldest_open">
-                    <a class="key" :href="`${JB}browse/${p.oldest_open.key}`" target="_blank" rel="noopener">{{ p.oldest_open.key }}</a>{{ ' ' }}
-                    <span :class="lvl(p.oldest_open.age_days, 30, 90)">{{ p.oldest_open.age_days }} дн.</span>
-                  </template>
-                  <span v-else class="sub">—</span>
-                </td>
-                <td class="n">
-                  <a v-if="p.carry_open" class="nl" :class="lvl(pct(p.carry_open, p.total), 20, 40)"
-                     :href="carryLink(p.key)"
-                     target="_blank" rel="noopener" title="Открыть в Jira">{{ p.carry_open }}</a>
-                  <span v-else class="sub">0</span>
-                  <span v-if="p.carry_open" class="sub"> {{ pct(p.carry_open, p.total) }}%</span>
-                </td>
-                <td class="n">{{ p.people }}</td>
-              </tr>
-              <tr v-if="!rows.length"><td :colspan="cols.length" class="sub empty">Никого нет по этому фильтру</td></tr>
-            </tbody>
-          </table>
+        <SortTable :cols="sprintCols" :rows="scopedP" :init="[4, 'asc']" />
+      </section>
+
+      <section v-else-if="tab === 'qa'">
+        <h2>Загрузка QA</h2>
+        <p class="lead">По полю «Тестировщик». Если у одного тестировщика задачи почти во всех проектах — похоже, это значение поля по умолчанию, а не реальное назначение.</p>
+        <SortTable :cols="qaCols" :rows="qaRows" :init="[2, 'desc']" />
+      </section>
+
+      <section v-else-if="tab === 'block'">
+        <h2>Узкие места</h2>
+        <p class="lead">Незакрытые задачи в статусах Blocked, Need Rework, «Требует уточнения», а также любые задачи без обновлений больше 30 дней.</p>
+        <div class="tools">
+          <input v-model="qBlock" type="search" placeholder="Поиск по ключу, тексту или исполнителю">
+          <select v-model="fSt" aria-label="Статус">
+            <option value="">Все статусы</option>
+            <option v-for="s in blockSt" :key="s" :value="s">{{ s }}</option>
+          </select>
+        </div>
+        <SortTable :cols="blockCols" :rows="blockRows" :init="[5, 'desc']" />
+      </section>
+
+      <section v-else-if="tab === 'stab'">
+        <h2>Стабильность спринтов</h2>
+        <p class="lead">Сколько задач перенесено из прошлых спринтов, сколько создано после старта текущего и сколько помечено внеплановыми.</p>
+        <SortTable :cols="stabCols" :rows="scopedP" :init="[4, 'desc']" />
+      </section>
+
+      <section v-else-if="tab === 'qual'">
+        <h2>Качество</h2>
+        <p class="lead">Доля задач типа «Ошибка» в спринте и задачи, вернувшиеся на доработку.</p>
+        <SortTable :cols="qualCols" :rows="scopedP" :init="[4, 'desc']" />
+      </section>
+
+      <section v-else-if="tab === 'rel'">
+        <h2>Готовность к релизу</h2>
+        <p class="lead">Процент готовности спринта (доля задач в «Готово») и задачи на финише: Code review, Test, Ready for deploy / In Staging. Задачи в Test разделены по полю «Тестировщик»: QA (и пустое поле), PM, тимлид / остальные.</p>
+        <SortTable :cols="relCols" :rows="scopedP" :init="[3, 'desc']" />
+      </section>
+
+      <section v-else-if="tab === 'next'">
+        <h2>Следующий спринт</h2>
+        <p class="lead">Готов ли следующий спринт к старту. Следующий ищется по названию текущего с номером +1 (например, «Адата Комплаенс 2026-19» → «2026-20»). «Перейдёт» — незакрытые задачи текущего спринта. «Без задач в следующем» — кто работает в текущем спринте проекта, но в следующем у него задач нет.</p>
+        <div class="psum" v-html="nsSum" />
+        <SortTable :cols="nextCols" :rows="nextRows" :init="[4, 'asc']" />
+      </section>
+
+      <section v-else-if="tab === 'dq'">
+        <h2>Качество данных в Jira</h2>
+        <p class="lead">Чего не хватает, чтобы строить отчёты по трудозатратам и срокам.</p>
+        <div class="notes">
+          <div v-for="[h, b, p] in notes" :key="h" class="note"><h3>{{ h }}</h3><b class="big">{{ b }}</b><p>{{ p }}</p></div>
         </div>
       </section>
+
+      <footer>Данные выгружены из jira.adata.kz через REST API и обновляются автоматически. Ссылки открывают актуальные задачи в Jira.</footer>
     </template>
   </div>
 </template>

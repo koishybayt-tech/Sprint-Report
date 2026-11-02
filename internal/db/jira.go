@@ -38,7 +38,9 @@ func OpenSprintIssues(ctx context.Context, pool *pgxpool.Pool) ([]metrics.Issue,
 	}
 
 	rows, err = pool.Query(ctx, `SELECT i.key, i.project_key, coalesce(p.name, i.project_key), i.status_id, i.status_name,
-			coalesce(i.type, ''), coalesce(i.plan, ''), coalesce(i.assignee, ''), i.created, i.updated, i.timespent_s, i.sprint_ids
+			coalesce(i.type, ''), coalesce(i.plan, ''), coalesce(i.assignee, ''), i.created, i.updated, i.timespent_s, i.sprint_ids,
+			coalesce(i.assignee_login, ''), coalesce(i.tester, ''), coalesce(i.raw->'fields'->'customfield_10902'->>'name', ''),
+			coalesce(i.position, ''), coalesce(i.summary, ''), coalesce(i.priority, '')
 		FROM jira_issues i LEFT JOIN jira_projects p ON p.key = i.project_key
 		WHERE i.in_open_sprints`)
 	if err != nil {
@@ -48,7 +50,8 @@ func OpenSprintIssues(ctx context.Context, pool *pgxpool.Pool) ([]metrics.Issue,
 		var is metrics.Issue
 		var ids []int64
 		err := r.Scan(&is.Key, &is.ProjectKey, &is.ProjectName, &is.StatusID, &is.StatusName,
-			&is.Type, &is.Plan, &is.Assignee, &is.Created, &is.Updated, &is.TimespentS, &ids)
+			&is.Type, &is.Plan, &is.Assignee, &is.Created, &is.Updated, &is.TimespentS, &ids,
+			&is.AssigneeLogin, &is.Tester, &is.TesterLogin, &is.Position, &is.Summary, &is.Priority)
 		for _, id := range ids {
 			if s, ok := sprints[id]; ok {
 				is.Sprints = append(is.Sprints, s)
@@ -96,22 +99,25 @@ func FutureSprints(ctx context.Context, pool *pgxpool.Pool) (map[string][]metric
 	return m, rows.Err()
 }
 
-// SprintIssueCounts — число задач в каждом активном и будущем спринте (как cf[10104] = id в Jira).
-func SprintIssueCounts(ctx context.Context, pool *pgxpool.Pool) (map[int64]int, error) {
-	rows, err := pool.Query(ctx, `SELECT s, count(*) FROM jira_issues, unnest(sprint_ids) s
-		WHERE in_open_sprints OR in_future_sprints GROUP BY s`)
+// SprintIssues — задачи активных и будущих спринтов (для разбора следующего спринта, как cf[10104] = id).
+func SprintIssues(ctx context.Context, pool *pgxpool.Pool) ([]metrics.SprintIssue, error) {
+	rows, err := pool.Query(ctx, `SELECT sprint_ids, status_name, coalesce(assignee, '') FROM jira_issues
+		WHERE in_open_sprints OR in_future_sprints`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	m := map[int64]int{}
-	for rows.Next() {
-		var id int64
-		var n int
-		if err := rows.Scan(&id, &n); err != nil {
-			return nil, err
-		}
-		m[id] = n
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (metrics.SprintIssue, error) {
+		var si metrics.SprintIssue
+		err := r.Scan(&si.SprintIDs, &si.Status, &si.Assignee)
+		return si, err
+	})
+}
+
+// TeamLeads — тимлиды (группа adata-team-leads), по алфавиту.
+func TeamLeads(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx, `SELECT name FROM jira_team_leads ORDER BY name`)
+	if err != nil {
+		return nil, err
 	}
-	return m, rows.Err()
+	return pgx.CollectRows(rows, pgx.RowTo[string])
 }

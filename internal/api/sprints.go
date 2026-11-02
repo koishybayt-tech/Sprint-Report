@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
+	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -12,87 +12,95 @@ import (
 	"github.com/adata/reports/internal/metrics"
 )
 
-type sprintsData struct {
-	updatedAt *time.Time
-	projects  []metrics.ProjectSprint
-}
-
-// loadSprints считает строки проектов на момент последней успешной синхронизации Jira.
-func loadSprints(r *http.Request, pool *pgxpool.Pool) (sprintsData, error) {
+// loadReport считает отчёт «Спринты» на момент последней успешной синхронизации Jira (nil — синхронизаций не было).
+func loadReport(r *http.Request, pool *pgxpool.Pool) (*metrics.SprintReport, error) {
 	ctx := r.Context()
 	last, err := db.LastSync(ctx, pool, "jira")
 	if err != nil || last == nil {
-		return sprintsData{projects: []metrics.ProjectSprint{}}, err
+		return nil, err
 	}
 	issues, err := db.OpenSprintIssues(ctx, pool)
 	if err != nil {
-		return sprintsData{}, err
+		return nil, err
 	}
 	leads, err := db.ProjectLeads(ctx, pool)
 	if err != nil {
-		return sprintsData{}, err
+		return nil, err
 	}
-	return sprintsData{updatedAt: last, projects: metrics.ProjectSprints(issues, leads, *last)}, nil
+	tl, err := db.TeamLeads(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	futures, err := db.FutureSprints(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	si, err := db.SprintIssues(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	rep := metrics.BuildSprintReport(issues, leads, tl, futures, si, *last)
+	return &rep, nil
+}
+
+// GET /api/v1/sprints/report — все данные отчёта «Спринты»; вкладки считаются на клиенте, как в page_template.html.
+func sprintReport(pool *pgxpool.Pool, log *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rep, err := loadReport(r, pool)
+		if err != nil {
+			fail(w, log, "sprints/report", err)
+			return
+		}
+		if rep == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"updated_at": nil})
+			return
+		}
+		writeJSON(w, http.StatusOK, rep)
+	}
 }
 
 // GET /api/v1/sprints?lead= — вкладка «Статус спринтов».
 func sprints(pool *pgxpool.Pool, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		d, err := loadSprints(r, pool)
+		rep, err := loadReport(r, pool)
 		if err != nil {
 			fail(w, log, "sprints", err)
 			return
 		}
-		projects := d.projects
+		if rep == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"updated_at": nil, "projects": []metrics.ProjectSprint{}})
+			return
+		}
+		projects := rep.Projects
 		if lead := r.URL.Query().Get("lead"); lead != "" {
 			projects = projects[:0:0]
-			for _, p := range d.projects {
+			for _, p := range rep.Projects {
 				if p.Lead == lead {
 					projects = append(projects, p)
 				}
 			}
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"updated_at": d.updatedAt, "projects": projects})
+		writeJSON(w, http.StatusOK, map[string]any{"updated_at": rep.UpdatedAt, "projects": projects})
 	}
 }
 
 // GET /api/v1/sprints/next — следующий спринт по каждому проекту (номер +1 к текущему).
 func nextSprints(pool *pgxpool.Pool, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		d, err := loadSprints(r, pool)
-		if err != nil {
-			fail(w, log, "sprints/next", err)
-			return
-		}
-		futures, err := db.FutureSprints(r.Context(), pool)
-		if err != nil {
-			fail(w, log, "sprints/next", err)
-			return
-		}
-		inSprint, err := db.SprintIssueCounts(r.Context(), pool)
+		rep, err := loadReport(r, pool)
 		if err != nil {
 			fail(w, log, "sprints/next", err)
 			return
 		}
 		out := []metrics.NextSprint{}
-		for _, p := range d.projects {
-			n := metrics.PickNext(p.Sprint, futures[p.Key])
-			if n == nil {
-				continue
+		if rep != nil {
+			for _, n := range rep.Next {
+				out = append(out, n)
 			}
-			name := n.Name
-			out = append(out, metrics.NextSprint{ProjectKey: p.Key, Current: p.Sprint, NextID: &n.ID, NextName: &name,
-				NextStart: dateStr(n.Start), NextEnd: dateStr(n.End), NextTotal: inSprint[n.ID]})
+			sort.Slice(out, func(a, b int) bool { return out[a].ProjectKey < out[b].ProjectKey })
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
-}
-
-func dateStr(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return t.In(metrics.Almaty).Format("2006-01-02")
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

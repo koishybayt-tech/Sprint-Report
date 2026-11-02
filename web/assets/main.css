@@ -67,3 +67,23 @@ a.nl.hi{color:var(--bad)}a.nl.mid{color:var(--warn)}
 .notice{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;margin-top:20px}
 .notice code{font-family:var(--f-mono);font-size:12px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* Вкладки отчёта «Спринты» */
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools input,.tools select{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:0}
+.tools input{flex:1 1 220px;max-width:340px}
+a.pl{font-family:var(--f-mono);font-size:12px;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin-right:2px;display:inline-block;margin-block:1px}
+a.pl:hover{background:var(--accent-soft);border-color:var(--accent)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.note h3{margin:0;font-size:14px}
+.note p{margin:0;color:var(--muted);font-size:13px}
+.note b.big{font:600 20px var(--f-mono)}
+.who{display:inline-block;font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin:1px 4px 1px 0;white-space:nowrap}
+.plist{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.pc{font-family:var(--f-mono);font-size:12px;min-width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:var(--fg);color:var(--bg);padding:0 6px;margin-right:2px}
+a.wl{text-decoration:none;color:var(--fg);margin:0}
+a.wl b{font-family:var(--f-mono);color:var(--accent);margin-left:2px}
+a.wl:hover{border-color:var(--accent);background:var(--accent-soft)}
+.psum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.psum b{color:var(--fg);font-family:var(--f-mono);font-weight:600}
+footer{margin-top:28px;color:var(--muted);font-size:12px}

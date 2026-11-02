@@ -104,12 +104,17 @@ func parseIssue(raw json.RawMessage) (Issue, error) {
 	if f.Timespent != nil {
 		is.TimespentS = *f.Timespent
 	}
+	// created/updated приходят, только если запрошены в fields (для списка тимлидов — нет).
 	var err error
-	if is.Created, err = ParseTime(f.Created); err != nil {
-		return is, fmt.Errorf("%s created: %w", r.Key, err)
+	if f.Created != "" {
+		if is.Created, err = ParseTime(f.Created); err != nil {
+			return is, fmt.Errorf("%s created: %w", r.Key, err)
+		}
 	}
-	if is.Updated, err = ParseTime(f.Updated); err != nil {
-		return is, fmt.Errorf("%s updated: %w", r.Key, err)
+	if f.Updated != "" {
+		if is.Updated, err = ParseTime(f.Updated); err != nil {
+			return is, fmt.Errorf("%s updated: %w", r.Key, err)
+		}
 	}
 	if f.ResolutionDate != "" {
 		t, err := ParseTime(f.ResolutionDate)

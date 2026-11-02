@@ -20,6 +20,7 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 		r.Get("/healthz", healthz(pool, log))
 		r.Get("/sprints", sprints(pool, log))
 		r.Get("/sprints/next", nextSprints(pool, log))
+		r.Get("/sprints/report", sprintReport(pool, log))
 	})
 	return r
 }

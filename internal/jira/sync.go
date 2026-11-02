@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,6 +21,9 @@ const OpenSprintsJQL = "cf[10104] in openSprints()"
 // JQL задач будущих спринтов — для числа задач в «следующем спринте» (ns_fetch.js считает cf[10104] = id).
 const FutureSprintsJQL = "cf[10104] in futureSprints()"
 
+// JQL тимлидов (TL в inc.js): исполнители из группы adata-team-leads с задачами за 180 дней.
+const TeamLeadsJQL = `assignee in membersOf("adata-team-leads") AND updated >= -180d`
+
 // Доска 140 пропускается при поиске следующего спринта (как в reference/sprints/ns_fetch.js).
 const skipBoardID = 140
 
@@ -30,6 +34,7 @@ type SyncStats struct {
 	Sprints       int `json:"sprints"`
 	FutureSprints int `json:"future_sprints"`
 	BoardErrors   int `json:"board_errors"`
+	TeamLeads     int `json:"team_leads"`
 }
 
 // FullSync забирает задачи активных и будущих спринтов, проекты с лидами и будущие спринты досок
@@ -71,6 +76,23 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 	projects, err := c.Projects(ctx)
 	if err != nil {
 		return err
+	}
+	// Тимлиды. Если группы нет или JQL упал — оставляем прежний список, синк не валим.
+	var teamLeads []string
+	tlIssues, tlErr := c.Search(ctx, TeamLeadsJQL, "assignee")
+	if tlErr != nil {
+		log.Warn("jira: тимлиды", "err", tlErr)
+	} else {
+		seen := map[string]bool{}
+		for _, is := range tlIssues {
+			if is.Assignee == nil {
+				continue
+			}
+			if n := strings.TrimSpace(is.Assignee.DisplayName); n != "" && !seen[n] {
+				seen[n] = true
+				teamLeads = append(teamLeads, n)
+			}
+		}
 	}
 
 	// Будущие спринты scrum-досок по каждому проекту, где есть задачи. Ошибка по одному проекту не валит синк.
@@ -170,6 +192,18 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 		}
 	}
 	st.FutureSprints = len(futures)
+
+	if tlErr == nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM jira_team_leads`); err != nil {
+			return err
+		}
+		for _, n := range teamLeads {
+			if _, err := tx.Exec(ctx, `INSERT INTO jira_team_leads (name) VALUES ($1)`, n); err != nil {
+				return err
+			}
+		}
+		st.TeamLeads = len(teamLeads)
+	}
 	return tx.Commit(ctx)
 }
 
