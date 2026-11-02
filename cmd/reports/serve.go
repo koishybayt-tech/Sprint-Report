@@ -53,6 +53,7 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 
 // runWorker синхронизирует Jira (каждые JIRA_SYNC_EVERY, 30m: изменённые задачи; раз в сутки после JIRA_FULL_SYNC_AT — полная)
 // историю задач года для карточки сотрудника (каждые JIRA_SYNC_EVERY, первая загрузка — полная),
+// всё это — только в рабочее время SYNC_HOURS (08:30–20:00 по Алматы),
 // и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 30m),
 // оба раза — сразу при старте, и принимает сообщения группы ботом Telegram.
 // Без JIRA_PAT / BITRIX_API_KEY / TG_BOT_TOKEN+TG_CHAT_ID соответствующая часть выключена.
@@ -87,8 +88,23 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 		log.Warn("worker: бот Telegram выключен", "reason", "нет TG_BOT_TOKEN или TG_CHAT_ID")
 	}
 	log.Info("worker: запущен", "jira_sync_every", cfg.JiraSyncEvery.String(), "bitrix_sync_every", cfg.BitrixSyncEvery.String())
+	// Вне рабочего времени (SYNC_HOURS) отчёты не обновляются; первый проход после начала дня догоняет всё,
+	// в том числе суточную полную синхронизацию Jira. Смена режима пишется в лог один раз.
+	offHours := false
+	inHours := func() bool {
+		in := cfg.InSyncHours(time.Now())
+		if in == offHours {
+			offHours = !in
+			if offHours {
+				log.Info("worker: нерабочее время — обновления Jira и Bitrix на паузе", "sync_hours", cfg.SyncHours())
+			} else {
+				log.Info("worker: рабочее время — обновления возобновлены")
+			}
+		}
+		return in
+	}
 	runJira := func() {
-		if client == nil {
+		if client == nil || !inHours() {
 			return
 		}
 		full, err := fullSyncDue(ctx, pool, cfg.JiraFullSyncAt)
@@ -101,7 +117,7 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 		}
 	}
 	runBitrix := func() {
-		if bx == nil {
+		if bx == nil || !inHours() {
 			return
 		}
 		if err := syncBitrix(ctx, log, bx, client, pool); err != nil && ctx.Err() == nil {
@@ -116,8 +132,10 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 			t := time.NewTicker(cfg.JiraSyncEvery)
 			defer t.Stop()
 			for {
-				if err := syncJiraHistory(ctx, log, client, pool, false); err != nil && ctx.Err() == nil {
-					log.Error("worker: история Jira", "err", err)
+				if cfg.InSyncHours(time.Now()) {
+					if err := syncJiraHistory(ctx, log, client, pool, false); err != nil && ctx.Err() == nil {
+						log.Error("worker: история Jira", "err", err)
+					}
 				}
 				select {
 				case <-ctx.Done():

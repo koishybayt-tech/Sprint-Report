@@ -56,16 +56,18 @@ type Issue struct {
 // Change — переход из истории задачи. Статус — названия (как в reference/employee/build_emp.py),
 // исполнитель — логины.
 type Change struct {
-	At    time.Time
-	Field string // status | assignee
-	From  string
-	To    string
+	At     time.Time
+	Field  string // status | assignee
+	From   string
+	To     string
+	Author string // логин того, кто сделал изменение
 }
 
 type rawChangelog struct {
 	Total     int `json:"total"`
 	Histories []struct {
 		Created string `json:"created"`
+		Author  *User  `json:"author"`
 		Items   []struct {
 			Field      string  `json:"field"`
 			FieldType  string  `json:"fieldtype"`
@@ -90,15 +92,19 @@ func parseChanges(cl *rawChangelog) ([]Change, error) {
 		if err != nil {
 			return nil, err
 		}
+		author := ""
+		if h.Author != nil {
+			author = h.Author.Name
+		}
 		for _, it := range h.Items {
 			if it.FieldType != "jira" {
 				continue
 			}
 			switch it.Field {
 			case "status":
-				out = append(out, Change{At: at, Field: "status", From: str(it.FromString), To: str(it.ToString)})
+				out = append(out, Change{At: at, Field: "status", From: str(it.FromString), To: str(it.ToString), Author: author})
 			case "assignee":
-				out = append(out, Change{At: at, Field: "assignee", From: str(it.From), To: str(it.To)})
+				out = append(out, Change{At: at, Field: "assignee", From: str(it.From), To: str(it.To), Author: author})
 			}
 		}
 	}

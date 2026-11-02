@@ -44,6 +44,15 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 				r.Get("/sprints/report", sprintReport(pool, log))
 			})
 
+			// Снепшоты к созвонам: admin и lead (docs/security.md).
+			r.Route("/snapshots", func(r chi.Router) {
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead))
+				r.Get("/", snapshotsList(pool, log))
+				r.Post("/", snapshotCreate(pool, log))
+				r.Get("/live", snapshotLive(pool, log))
+				r.Get("/{date}", snapshotGet(pool, log))
+			})
+
 			// Очередь «Кто это?» (Telegram → сотрудник): admin и hr.
 			r.Route("/admin/tg", func(r chi.Router) {
 				r.Use(requireRole(auth.RoleAdmin, auth.RoleHR))

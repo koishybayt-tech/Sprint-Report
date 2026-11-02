@@ -10,6 +10,8 @@ export const ROLE_TITLES: Record<Me['role'], string> = {
 
 // Кто какие отчёты видит — docs/security.md.
 export const canSeeSprints = (me: Me | null) => !!me && me.role !== 'hr'
+// Снепшоты к созвонам — admin и lead (docs/security.md).
+export const canSeeSnapshots = (me: Me | null) => !!me && (me.role === 'admin' || me.role === 'lead')
 
 export function useMe() {
   const me = useState<Me | null>('me', () => null)

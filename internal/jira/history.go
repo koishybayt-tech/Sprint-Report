@@ -116,8 +116,8 @@ func writeHistory(ctx context.Context, pool *pgxpool.Pool, issues []Issue) error
 	b := &pgx.Batch{}
 	for _, is := range issues {
 		for _, ch := range is.Changes {
-			b.Queue(`INSERT INTO jira_changelog (issue_key, at, field, from_val, to_val) VALUES ($1, $2, $3, $4, $5)
-				ON CONFLICT DO NOTHING`, is.Key, ch.At, ch.Field, nullStr(ch.From), nullStr(ch.To))
+			b.Queue(`INSERT INTO jira_changelog (issue_key, at, field, from_val, to_val, author) VALUES ($1, $2, $3, $4, $5, $6)
+				ON CONFLICT DO NOTHING`, is.Key, ch.At, ch.Field, nullStr(ch.From), nullStr(ch.To), nullStr(ch.Author))
 		}
 	}
 	if err := tx.SendBatch(ctx, b).Close(); err != nil {

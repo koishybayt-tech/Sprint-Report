@@ -9,6 +9,7 @@ const route = useRoute()
       <NuxtLink to="/" class="brand">Отчёты Adata</NuxtLink>
       <nav class="appnav" aria-label="Разделы">
         <NuxtLink v-if="canSeeSprints(me)" to="/sprints" :class="{ on: route.path.startsWith('/sprints') }">Спринты</NuxtLink>
+        <NuxtLink v-if="canSeeSnapshots(me)" to="/snapshots" :class="{ on: route.path.startsWith('/snapshots') }">Снепшоты</NuxtLink>
         <NuxtLink v-if="me" to="/attendance" :class="{ on: route.path.startsWith('/attendance') }">Посещаемость</NuxtLink>
         <NuxtLink v-if="me" :to="me.role === 'employee' && me.employee_id ? `/employee/${me.employee_id}` : '/employee'" :class="{ on: route.path.startsWith('/employee') }">Сотрудники</NuxtLink>
         <NuxtLink to="/settings" :class="{ on: route.path.startsWith('/settings') }">Настройки</NuxtLink>
