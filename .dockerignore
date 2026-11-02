@@ -1,0 +1,8 @@
+.git
+.claude
+**/.env
+web/node_modules
+web/.nuxt
+web/.output
+reports
+*.sql.gz*

@@ -1,0 +1,10 @@
+# Локальный запуск без Caddy: api на :8080, web на :3000 (web проксирует /api → api).
+# docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml --env-file deploy/.env up -d --build
+# Если порт занят: API_PORT=18080 WEB_PORT=13000 docker compose ...
+services:
+  api:
+    ports: ["${API_PORT:-8080}:8080"]
+  web:
+    ports: ["${WEB_PORT:-3000}:3000"]
+  caddy:
+    profiles: ["prod"]   # не запускается без --profile prod

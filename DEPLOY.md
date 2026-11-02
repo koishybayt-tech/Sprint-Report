@@ -79,6 +79,8 @@ cd /opt/adata-reports && make deploy
 
 ## Локальная разработка
 ```bash
+# весь стек в docker без Caddy: api :8080, web :3000 (порты меняются через API_PORT / WEB_PORT)
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml --env-file deploy/.env up -d --build
 make dev        # postgres в docker, api :8080, web :3000 (прокси /api → 8080)
 make test
 make tgparse    # метрики парсера на корпусе

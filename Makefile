@@ -5,7 +5,7 @@ COMPOSE = docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 dev:            ## postgres в docker, api и web локально
 	docker run -d --rm --name reports-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_USER=reports -e POSTGRES_DB=reports -p 5432:5432 postgres:16-alpine || true
 	DATABASE_URL=postgres://reports:dev@localhost:5432/reports?sslmode=disable go run ./cmd/reports serve & \
-	cd web && pnpm dev
+	cd web && NUXT_API_UPSTREAM=http://localhost:8080 pnpm dev
 
 test:
 	go test ./...
