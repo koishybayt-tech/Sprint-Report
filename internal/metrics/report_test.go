@@ -1,6 +1,9 @@
 package metrics
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestBuildSprintReport(t *testing.T) {
 	active := Sprint{ID: 10, Name: "ABC 2026-19", State: "ACTIVE", Start: ptr(at("2026-10-26 09:00")), End: ptr(at("2026-11-06 18:00"))}
@@ -66,5 +69,27 @@ func TestBuildSprintReport(t *testing.T) {
 	n := r.Next["ABC"]
 	if n.NextID == nil || *n.NextID != 11 || n.NextTotal != 2 || n.Statuses[0] != (NameCount{"Сделать", 2}) || len(n.By) != 2 {
 		t.Errorf("next: %+v", n)
+	}
+}
+
+func TestAttachAbsences(t *testing.T) {
+	r := SprintReport{Logins: map[string]string{"Иванов Иван": "ivanov"}}
+	to := at("2026-11-09 00:00")
+	AttachAbsences(&r, []AbsenceRow{
+		{Login: "ivanov", FullName: "Ivanov Ivan", Kind: "vacation", From: at("2026-11-02 00:00"), To: &to, Source: "bitrix", Note: "Трудовой отпуск"},
+		{Login: "petrov", FullName: "Петров Пётр", Kind: "unpaid", From: at("2026-11-10 00:00"), To: &to, Source: "bitrix"},
+	}, map[string]time.Time{"bitrix": to})
+	if len(r.Absences) != 2 {
+		t.Fatalf("absences: %+v", r.Absences)
+	}
+	a, b := r.Absences[0], r.Absences[1]
+	if a.Name != "Иванов Иван" || a.Type != "vac" || a.From != "2026-11-02" || *a.To != "2026-11-09" || a.Source != "Bitrix" {
+		t.Errorf("a=%+v", a)
+	}
+	if b.Name != "Петров Пётр" || b.Type != "bs" || b.Note != "Отпуск без содержания" {
+		t.Errorf("b=%+v", b)
+	}
+	if _, ok := r.AbsencesAt["bitrix"]; !ok {
+		t.Error("нет absences_at")
 	}
 }

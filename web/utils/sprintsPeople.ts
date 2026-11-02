@@ -1,6 +1,6 @@
 // Логика вкладок по людям из reference/sprints/page_template.html (needFlag, switchInfo, donorsFor, LRES…), 1-в-1.
-// Отсутствий (ABS из Bitrix/Telegram) пока нет — absNow/absSoon всегда пусты, как в шаблоне без ABS.
-import { type Model, type Row, UNASSIGNED, esc, jiraLinks } from './sprints'
+// Отсутствия (ABS): отпуска и БС из Bitrix, позже больничные и «отпросился» из Telegram.
+import { type Model, type Row, UNASSIGNED, esc, fmt, jiraLinks } from './sprints'
 
 // Пороги и галочки вкладок; общие, потому что needFlag/overFlag используются и в KPI, и в дашборде.
 export type Ctl = {
@@ -8,15 +8,24 @@ export type Ctl = {
   oTh: number; oAll: boolean // «Перегружены»: в бэклоге ≥, показывать ПМ и тимлидов
   sTh: number // «Переключаются»: застряло ≥
   tTh: number; tPl: boolean // «Тимлиды»: держит ≥, добавить руководителей проектов
+  aH: number; aRisk: boolean // «Отсутствия»: на ближайшие N дней, только с задачами
 }
-export const defaultCtl = (): Ctl => ({ nTh: 2, dTh: 2, nAll: false, oTh: 8, oAll: false, sTh: 1, tTh: 3, tPl: false })
+export const defaultCtl = (): Ctl => ({ nTh: 2, dTh: 2, nAll: false, oTh: 8, oAll: false, sTh: 1, tTh: 3, tPl: false, aH: 14, aRisk: true })
+
+export const ABT: Record<string, string> = { vac: 'Отпуск', bs: 'Отпуск б/с', sick: 'Больничный', off: 'Отпросился' }
+export const OPENQ = 'status in (10100, 10011, 10000)'
+export const addD = (d: string, k: number) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + k); return x.toISOString().slice(0, 10) }
+export type Ab = Model['AB'][number]
+export const absTxt = (a: Ab, SNAP: string) => a.ty === 'off'
+  ? (a.fr > SNAP ? 'отпросился на ' + fmt(a.fr) : a.fr === SNAP ? 'отпросился сегодня' : 'отпросился ' + fmt(a.fr))
+  : a.fr > SNAP ? `${ABT[a.ty].toLowerCase()} с ${fmt(a.fr)}` : ABT[a.ty] + (a.to ? ` до ${fmt(a.to)}` : ' · выход не указан')
 
 type L = ReturnType<typeof jiraLinks>
 export type Group = { lead: string; keys: string[]; bl: number; act: number; wk: number; cr: number; rw: number
   blStale: number; blAge: number; blUpd: number; stalledKeys: string[] }
 
-export function peopleLogic(m: Model, ctl: Ctl, inS: (k: string) => boolean) {
-  const { PEOPLE, PR, LEAD, roleOf, isTL, INACT } = m
+export function peopleLogic(m: Model, ctl: Ctl, inS: (k: string) => boolean, allScope: () => boolean) {
+  const { PEOPLE, PR, PBY, LEAD, roleOf, isTL, INACT, AB, SNAP } = m
   const sumRows = (rows: Row[], f: keyof Row) => rows.reduce((a, r) => a + (r[f] as number), 0)
 
   // need: очередь по ВСЕМ проектам
@@ -34,7 +43,29 @@ export function peopleLogic(m: Model, ctl: Ctl, inS: (k: string) => boolean) {
     stalled.forEach(g => { g.stalledKeys = PEOPLE[n].rows.filter(r => LEAD(r.k) === g.lead && r.bl > 0).map(r => r.k) })
     return { active, stalled, flag: active.length > 0 && stalled.length > 0 }
   }
-  const absNow = (_n: string) => undefined
+  // ---------- отсутствия ----------
+  const TODAY = new Date(SNAP + 'T12:00:00')
+  const days = (d: string) => Math.round((new Date(d + 'T12:00:00').getTime() - TODAY.getTime()) / 864e5)
+  const absNow = (n: string) => AB.find(a => a.n === n && a.fr <= SNAP && (!a.to || a.to >= SNAP))
+  const absSoon = (n: string, h: number) => AB.filter(a => a.n === n && a.fr > SNAP && a.fr <= addD(SNAP, h)).sort((x, y) => x.fr < y.fr ? -1 : 1)[0]
+  type RK = { k: string; q: number; en: string; hit: boolean }
+  type AbRow = Ab & { pos: string; now: boolean; pr: string[]; bl: number; wk: number; rw: number; cr: number; ts: number; dn: number; q: number
+    rk: RK[]; ls: { l: string; keys: string[]; t: number }[]; endRisk: boolean; when: number }
+  function absRows(H: number, onlyRisk: boolean): AbRow[] {
+    const lim = addD(SNAP, H)
+    return AB.filter(a => (!a.to || a.to >= SNAP) && a.fr <= lim).map(a => {
+      const P = PEOPLE[a.n], rows = P ? P.rows.filter(r => inS(r.k)) : []
+      if (!rows.length && !allScope()) return null
+      const x: any = { ...a, pos: roleOf(a.n), now: a.fr <= SNAP, pr: rows.map(r => r.k) }
+      ;(['bl', 'wk', 'rw', 'cr', 'ts', 'dn'] as const).forEach(f => { x[f] = sumRows(rows, f) }); x.q = x.bl + x.wk + x.rw
+      x.rk = rows.filter(r => r.bl + r.wk + r.rw > 0).map(r => { const p = PBY[r.k]; return { k: r.k, q: r.bl + r.wk + r.rw, en: p.en, hit: p.en >= a.fr && (!a.to || addD(p.en, -2) <= a.to) } }).sort((u: RK, v: RK) => v.q - u.q)
+      const LM: Record<string, { l: string; keys: string[]; t: number }> = {}
+      x.rk.forEach((r: RK) => { const l = LEAD(r.k); const mm = LM[l] ??= { l, keys: [], t: 0 }; mm.keys.push(r.k); mm.t += r.q })
+      x.ls = Object.values(LM).sort((u, v) => v.t - u.t); x.endRisk = x.rk.some((r: RK) => r.hit); x.when = x.now ? (a.to ? days(a.to) : 999) : days(a.fr)
+      return x as AbRow
+    }).filter((x): x is AbRow => !!x && (!onlyRisk || x.q > 0))
+  }
+  const absVisibleRisk = () => absRows(0, true).filter(x => x.now).length
 
   const EXCL = (n: string) => isTL(n) || /Project Manager|QA Engineer/.test(roleOf(n)) || n === UNASSIGNED
   function needFlag(n: string) {
@@ -84,7 +115,7 @@ export function peopleLogic(m: Model, ctl: Ctl, inS: (k: string) => boolean) {
     return Object.values(M).sort((a, b) => b.t - a.t)
   }
 
-  return { sumRows, needInfo, switchInfo, absNow, EXCL, needFlag, donorsFor, needVisible, isPMlike, blTotal, overFlag,
+  return { sumRows, needInfo, switchInfo, absNow, absSoon, absRows, absVisibleRisk, days, EXCL, needFlag, donorsFor, needVisible, isPMlike, blTotal, overFlag,
     overVisible, receiversFor, switchVisible, leadsOf }
 }
 export type PeopleLogic = ReturnType<typeof peopleLogic>

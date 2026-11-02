@@ -2,7 +2,7 @@
 // Вкладки отчёта «Спринты» по людям: Дэшборды, Загрузка ресурсов, Ресурсы по руководителям, Нужны задачи,
 // Перегружены, Переключаются, Тимлиды и бэклог. Колонки — из reference/sprints/page_template.html 1-в-1.
 import { type Col, type Model, type P, UNASSIGNED, esc, fmt, jiraLinks, lvl, pct, sumOf } from '~/utils/sprints'
-import { type Ctl, type LresLead, type LresProj, type PeopleLogic, lres } from '~/utils/sprintsPeople'
+import { ABT, type Ab, type Ctl, type LresLead, type LresProj, OPENQ, type PeopleLogic, absTxt, lres } from '~/utils/sprintsPeople'
 
 const props = defineProps<{
   tab: string; m: Model; L: ReturnType<typeof jiraLinks>; pl: PeopleLogic; ctl: Ctl
@@ -25,7 +25,7 @@ const fPos = ref('')
 const qPeople = ref('')
 const allPos = computed(() => [...new Set(Object.keys(props.m.PEOPLE).map(props.m.roleOf))].sort())
 type A = { n: string; pos: string; pr: string[]; t: number; bl: number; wk: number; cr: number; rw: number; ts: number; dn: number; bug: number
-  open: number; need: boolean; over: boolean; sw: boolean; tl: boolean }
+  open: number; need: boolean; over: boolean; sw: boolean; tl: boolean; ab: Ab | undefined }
 const peopleRows = computed<A[]>(() => {
   const { pl, m } = props
   return Object.values(m.PEOPLE).map(Pp => {
@@ -33,12 +33,13 @@ const peopleRows = computed<A[]>(() => {
     const a: any = { n: Pp.n, pos: m.roleOf(Pp.n), pr: rows.map(r => r.k) }
     ;(['t', 'bl', 'wk', 'cr', 'rw', 'ts', 'dn', 'bug'] as const).forEach(f => { a[f] = pl.sumRows(rows, f) })
     a.open = a.t - a.dn; a.need = pl.needFlag(Pp.n); a.over = pl.overFlag(Pp.n); a.sw = pl.switchInfo(Pp.n).flag; a.tl = m.isTL(Pp.n)
+    a.ab = pl.absNow(Pp.n) || pl.absSoon(Pp.n, 7)
     return a as A
   }).filter((a): a is A => !!a).filter(a => (!fPos.value || a.pos === fPos.value) && (!qPeople.value || a.n.toLowerCase().includes(qPeople.value.toLowerCase())) &&
-    (!pFlag.value || (pFlag.value === 'need' && a.need) || (pFlag.value === 'over' && a.over) || (pFlag.value === 'switch' && a.sw) || (pFlag.value === 'tl' && a.tl)))
+    (!pFlag.value || (pFlag.value === 'need' && a.need) || (pFlag.value === 'over' && a.over) || (pFlag.value === 'switch' && a.sw) || (pFlag.value === 'tl' && a.tl) || (pFlag.value === 'abs' && a.ab)))
 })
 const peopleSum = computed(() => { const r = peopleRows.value; return `<span><b>${r.length}</b> чел.</span><span><b>${sumOf(r, 't')}</b> задач</span>` + SEG.slice().reverse().map(([k, l]) => `<span>${l} <b>${sumOf(r, k)}</b></span>`).join('') })
-const flagChips = (a: A) => (a.tl ? '<span class="pill mute">тимлид</span> ' : '') + (a.need ? '<span class="pill warn">нужны задачи</span> ' : '') + (a.over ? '<span class="pill bad">перегружен</span> ' : '') + (a.sw ? `<span class="pill bad has-tip" tabindex="0" data-tipn="${esc(a.n)}">тормозит проект ⓘ</span>` : '')
+const flagChips = (a: A) => (a.ab ? `<span class="pill ${a.ab.fr > props.m.SNAP ? 'warn' : 'bad'}" title="${esc(a.ab.src + (a.ab.note ? ' · ' + a.ab.note : ''))}">${esc(absTxt(a.ab, props.m.SNAP))}</span> ` : '') + (a.tl ? '<span class="pill mute">тимлид</span> ' : '') + (a.need ? '<span class="pill warn">нужны задачи</span> ' : '') + (a.over ? '<span class="pill bad">перегружен</span> ' : '') + (a.sw ? `<span class="pill bad has-tip" tabindex="0" data-tipn="${esc(a.n)}">тормозит проект ⓘ</span>` : '')
 const peopleCols = computed<Col<A>[]>(() => {
   const { jq, nl, who, projQ, projList, ST } = props.L
   const pp = (a: A, st?: string) => jq([who(a.n), projQ(), st ?? ''])
@@ -84,6 +85,32 @@ const lresCols = computed<Col<LresLead>[]>(() => {
   ]
 })
 const lresEx = { key: (x: LresLead) => x.l, sub: (x: LresLead) => x.sub }
+
+// ---------- Отсутствия ----------
+type AR = ReturnType<PeopleLogic['absRows']>[number]
+const absRowsTab = computed(() => props.pl.absRows(props.ctl.aH || 0, props.ctl.aRisk))
+const absSum = computed(() => { const r = absRowsTab.value; return `<span><b>${r.length}</b> отсутствий</span><span>Сейчас <b>${r.filter(a => a.now).length}</b></span><span>Скоро <b>${r.filter(a => !a.now).length}</b></span><span>Под конец спринта <b>${r.filter(a => a.endRisk).length}</b></span><span>Задач не закроется <b>${sumOf(r, 'q')}</b></span>` })
+const absSrc = computed(() => {
+  const at = props.m.ABSAT, f = (s?: string) => { if (!s) return ''; const d = new Date(s), p = (n: number) => String(n).padStart(2, '0'); return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}` }
+  return [at.bitrix ? `Bitrix обновлён ${f(at.bitrix)}` : 'Bitrix ещё не синхронизирован', at.telegram ? `Telegram прочитан ${f(at.telegram)}` : 'Telegram пока не подключён'].join(', ') + '.'
+})
+const absCols = computed<Col<AR>[]>(() => {
+  const { jq, nl, who, projQ, ST } = props.L, m = props.m
+  return [
+    { h: 'Сотрудник', v: a => a.n, f: a => esc(a.n) + `<div class="sub">${a.pos === '—' ? 'роль не указана' : esc(a.pos)}</div>` },
+    { h: 'Отсутствие', v: a => a.ty, f: a => `<span class="pill ${a.ty === 'sick' ? 'bad' : a.ty === 'off' ? 'mute' : 'warn'}">${ABT[a.ty]}</span>${a.endRisk ? ' <span class="pill bad" title="Спринт заканчивается во время отсутствия или в течение 2 дней после">конец спринта</span>' : ''}<div class="sub">${a.ty === 'off' ? fmt(a.fr) : fmt(a.fr) + ' – ' + (a.to ? fmt(a.to) : '?')}</div>` },
+    { h: 'Когда', v: a => a.now ? -1 : a.when, num: true, cls: 'wrap', tip: 'Отсутствует сейчас или начнёт отсутствовать через N дней', f: a => a.ty === 'off' ? `<b class="${a.now ? 'hi' : 'mid'}">${a.now ? 'Сегодня' : fmt(a.fr)}</b> <span class="sub">${esc(a.note.replace('Отпросился: ', ''))}</span>` : a.now ? `<b class="hi">Сейчас</b> <span class="sub">${a.to ? (a.when === 0 ? 'последний день' : 'ещё ' + a.when + ' дн.') : 'дата выхода не указана'}</span>` : `<span class="mid">через ${a.when} дн.</span>` },
+    { h: 'Не закроются', v: a => a.q, num: true, tip: 'Бэклог + В работе + Реворк по выбранным проектам', f: a => nl(a.q, jq([who(a.n), projQ(), OPENQ]), a.q ? 'hi' : '') },
+    { h: 'Бэклог', v: a => a.bl, num: true, f: a => nl(a.bl, jq([who(a.n), projQ(), ST.bl])) },
+    { h: 'В работе', v: a => a.wk, num: true, f: a => nl(a.wk, jq([who(a.n), projQ(), ST.wk])) },
+    { h: 'Реворк', v: a => a.rw, num: true, f: a => nl(a.rw, jq([who(a.n), projQ(), ST.rw]), a.rw ? 'mid' : '') },
+    { h: 'Ревью / тест', v: a => a.cr + a.ts, num: true, tip: 'Ждут других, но вопросы по ним некому будет закрыть', f: a => nl(a.cr + a.ts, jq([who(a.n), projQ(), 'status not in (10100, 10011, 10000, 10001)'])) },
+    { h: 'Проекты под риском', v: a => a.rk.length, num: true, cls: 'wrap', tip: 'Проекты, где у сотрудника остались незакрытые задачи. Оранжевым — спринт заканчивается во время отсутствия или в течение 2 дней после него',
+      f: a => a.rk.length ? `<div class="plist">${a.rk.map(r => `<a class="pl${r.hit ? ' wl same' : ''}" style="${r.hit ? 'border-color:var(--warn);background:var(--warn-soft)' : ''}" href="${jq([who(a.n), 'project = "' + r.k + '"', OPENQ])}" target="_blank" rel="noopener" title="${esc(m.pname(r.k))} · ${esc(m.LEAD(r.k))} · спринт до ${fmt(r.en)}${r.hit ? ' — спринт заканчивается во время отсутствия или сразу после' : ''}">${r.k} <b>${r.q}</b></a>`).join(' ')}</div>` : '<span class="sub">—</span>' },
+    { h: 'Руководители (ПМ)', v: a => a.ls.length, num: true, cls: 'wrap', tip: 'Кому переназначать задачи', f: a => a.ls.length ? `<div class="plist">${a.ls.map(x => `<a class="who wl" href="${jq([who(a.n), pin(x.keys), OPENQ])}" target="_blank" rel="noopener" title="${esc(x.l)}: ${x.keys.join(', ')} — ${x.t} незакрытых задач">${esc(x.l)} <b>${x.t}</b></a>`).join('')}</div>` : '<span class="sub">—</span>' },
+    { h: 'Источник', v: a => a.src, cls: 'wrap', f: a => `<span class="sub">${esc(a.src)}${a.note ? ' · ' + esc(a.note) : ''}</span>` },
+  ]
+})
 
 // ---------- Нужны задачи ----------
 type NA = { n: string; pos: string; tl: boolean; pr: string[]; ls: { l: string; keys: string[]; t: number }[]; donors: ReturnType<PeopleLogic['donorsFor']>
@@ -219,12 +246,21 @@ const dnSub = computed(() => { const { nr, need0 } = dashNeed.value; return nr.l
 const dnTable = computed(() => {
   const { jq, nl, who, pl: plink } = props.L
   return '<thead><tr><th>Сотрудник</th><th>Роль</th><th class=n>Осталось</th><th class=n>Ревью/тест</th><th>Проекты</th></tr></thead><tbody>' +
-    (dashNeed.value.nr.slice(0, 10).map(a => `<tr><td>${esc(a.n)}</td><td class="sub">${esc(a.pos)}</td><td class=n>${a.q === 0 ? '<span class="pill bad">0 · нет задач</span>' : `<span class="pill warn">${a.q}</span>`}</td><td class=n>${nl(a.cr + a.ts, jq([who(a.n), 'status not in (10100, 10011, 10000, 10001)']))}</td><td>${a.pr.slice(0, 3).map(k => plink(k, jq([who(a.n), 'project = "' + k + '"']))).join(' ')}${a.pr.length > 3 ? ` <span class="sub">+${a.pr.length - 3}</span>` : ''}</td></tr>`).join('') || '<tr><td colspan=5 class="sub empty">Никого нет</td></tr>') + '</tbody>'
+    (dashNeed.value.nr.slice(0, 10).map(a => `<tr><td>${esc(a.n)}${(x => x ? ` <span class="pill warn" title="Скоро отсутствует">${esc(absTxt(x, props.m.SNAP))}</span>` : '')(props.pl.absSoon(a.n, 14))}</td><td class="sub">${esc(a.pos)}</td><td class=n>${a.q === 0 ? '<span class="pill bad">0 · нет задач</span>' : `<span class="pill warn">${a.q}</span>`}</td><td class=n>${nl(a.cr + a.ts, jq([who(a.n), 'status not in (10100, 10011, 10000, 10001)']))}</td><td>${a.pr.slice(0, 3).map(k => plink(k, jq([who(a.n), 'project = "' + k + '"']))).join(' ')}${a.pr.length > 3 ? ` <span class="sub">+${a.pr.length - 3}</span>` : ''}</td></tr>`).join('') || '<tr><td colspan=5 class="sub empty">Никого нет</td></tr>') + '</tbody>'
 })
-type LR = { l: string; ps: P[]; keys: string[]; T: number; dn: number; done: number; tm: number; stuck: P[]; lagP: P[]; noNext: P[]; blk: number; need: string[]; over: string[]; sw: string[] }
+const dashAbs = computed(() => props.pl.absRows(14, false).sort((a, b) => (+b.now - +a.now) || (a.fr < b.fr ? -1 : 1)))
+const daSub = computed(() => { const ar = dashAbs.value; return ar.length ? `${ar.filter(a => a.now).length} отсутствуют сейчас, ${ar.filter(a => !a.now).length} — в ближайшие 14 дней. Отпуска — Bitrix, больничные и «отпросился» — Telegram.` : 'Отсутствий нет.' })
+const daTable = computed(() => {
+  const { jq, nl, who } = props.L, ar = dashAbs.value
+  return '<thead><tr><th>Сотрудник</th><th>Отсутствие</th><th class=n>Открытых задач</th><th>Риск</th></tr></thead><tbody>' +
+    (ar.slice(0, 12).map(a => `<tr><td>${esc(a.n)}<div class="sub">${esc(a.pos)}</div></td><td><span class="pill ${a.now ? 'bad' : 'warn'}">${esc(absTxt(a, props.m.SNAP))}</span></td><td class=n>${nl(a.q, jq([who(a.n), OPENQ]))}</td><td>${a.endRisk ? '<span class="pill bad">конец спринта</span>' : a.q ? '<span class="pill warn">задачи висят</span>' : '<span class="sub">—</span>'}</td></tr>`).join('') || '<tr><td colspan=4 class="sub empty">Никого нет</td></tr>') +
+    '</tbody>' + (ar.length > 12 ? `<tfoot><tr><td colspan=4 class="sub">ещё ${ar.length - 12} — на вкладке «Отсутствия»</td></tr></tfoot>` : '')
+})
+type LR = { l: string; ps: P[]; keys: string[]; T: number; dn: number; done: number; tm: number; stuck: P[]; lagP: P[]; noNext: P[]; blk: number; need: string[]; over: string[]; sw: string[]; abs: AR[]; risk: number }
 const leadRows = computed<LR[]>(() => {
   const { pl, m } = props, NSD = m.NSD
   const L: Record<string, P[]> = {}; props.scopedP.forEach(p => (L[p.lead] ??= []).push(p))
+  const ab = pl.absRows(14, true)
   return Object.entries(L).map(([l, ps]) => {
     const keys = ps.map(p => p.k), T = sumOf(ps, 't'), dn = sumOf(ps, 'dn')
     const tm = Math.round(ps.reduce((a, p) => a + p.time * p.t, 0) / Math.max(1, T))
@@ -233,7 +269,9 @@ const leadRows = computed<LR[]>(() => {
     const need = Object.keys(m.PEOPLE).filter(n => pl.needFlag(n) && inK(n).length && n !== l).sort((a, b) => pl.needInfo(a) - pl.needInfo(b))
     const over = Object.keys(m.PEOPLE).filter(n => pl.overFlag(n) && inK(n).some(r => r.bl))
     const sw = Object.keys(m.PEOPLE).filter(n => { const s = pl.switchInfo(n); return s.flag && s.stalled.some(g => g.lead === l) })
-    return { l, ps, keys, T, dn, done: pct(dn, T), tm, stuck, lagP, noNext, blk: sumOf(ps, 'blk'), need, over, sw }
+    const abs = ab.filter(x => x.rk.some(r => keys.includes(r.k)))
+    const risk = stuck.length * 3 + lagP.length * 2 + noNext.length + sumOf(ps, 'blk') / 5 + abs.filter(x => x.endRisk).length * 2 + sw.length
+    return { l, ps, keys, T, dn, done: pct(dn, T), tm, stuck, lagP, noNext, blk: sumOf(ps, 'blk'), need, over, sw, abs, risk }
   })
 })
 const dleadCols = computed<Col<LR>[]>(() => {
@@ -250,6 +288,7 @@ const dleadCols = computed<Col<LR>[]>(() => {
       x.blk ? `<a class="pill bad" href="${jq([pin(x.keys), 'status = "Blocked"'])}" target="_blank" rel="noopener">Blocked ${x.blk}</a>` : '',
     ].filter(Boolean).join(' ') || '<span class="pill ok">в норме</span>' },
     { h: 'Нужны задачи', v: x => x.need.length, num: true, cls: 'wrap', f: x => nmList(x.need.map(n => nameChip(n, jq([who(n)]), pl.needInfo(n) === 0 ? 'bad' : 'warn', pl.needInfo(n) === 0 ? '0' : String(pl.needInfo(n))))) },
+    { h: 'Отсутствуют', v: x => x.abs.length, num: true, cls: 'wrap', f: x => nmList(x.abs.map(a => nameChip(a.n, jq([who(a.n), OPENQ, pin(x.keys)]), a.endRisk || a.now ? 'bad' : 'warn', absTxt(a, props.m.SNAP)))) },
     { h: 'Перегружены', v: x => x.over.length, num: true, cls: 'wrap', f: x => nmList(x.over.map(n => nameChip(n, jq([who(n), ST.bl]), 'bad', pl.blTotal(n) + ' в бэклоге'))) },
     { h: 'Тормозят его проекты', v: x => x.sw.length, num: true, cls: 'wrap', f: x => nmList(x.sw.map(n => nameChip(n, jq([who(n), ST.bl, pin(x.keys)]), 'bad'))) },
   ]
@@ -274,8 +313,9 @@ function onDashClick(e: MouseEvent) {
         <div class="tbl"><table v-html="dnTable" /></div>
       </div>
       <div class="dtop">
-        <h3><span>Кто отсутствует (сейчас и в ближайшие 14 дней)</span></h3>
-        <p class="sub" style="margin:0 0 6px">Отпуска, больничные и «отпросился» появятся после подключения Bitrix и Telegram-группы.</p>
+        <h3><span>Кто отсутствует (сейчас и в ближайшие 14 дней)</span><button data-go="abs">все →</button></h3>
+        <p class="sub" style="margin:0 0 6px">{{ daSub }}</p>
+        <div class="tbl"><table v-html="daTable" /></div>
       </div>
     </div>
   </section>
@@ -286,7 +326,7 @@ function onDashClick(e: MouseEvent) {
     <div class="tools">
       <select v-model="pFlag" aria-label="Показать">
         <option value="">Все сотрудники</option><option value="need">Нужны задачи</option><option value="over">Перегружены бэклогом</option>
-        <option value="switch">Переключаются между руководителями</option><option value="tl">Тимлиды</option>
+        <option value="switch">Переключаются между руководителями</option><option value="tl">Тимлиды</option><option value="abs">Отпуск / больничный</option>
       </select>
       <select v-model="fPos" aria-label="Роль">
         <option value="">Все роли</option><option v-for="p in allPos" :key="p">{{ p }}</option>
@@ -302,6 +342,17 @@ function onDashClick(e: MouseEvent) {
     <p class="lead">Какую долю всех сотрудников занимает каждый руководитель в текущих спринтах. Если человек работает в проектах нескольких руководителей, он делится между ними пропорционально числу своих задач в спринте (например, 6 задач у одного и 2 у другого — это 0,75 и 0,25 человека). Уволенные и задачи без исполнителя не учитываются. Нажмите на строку руководителя, чтобы увидеть, сколько ресурсов занимает каждый его проект.</p>
     <div class="psum" v-html="lresSum" />
     <SortTable :cols="lresCols" :rows="LRES.L" :init="[2, 'desc']" :ex="lresEx" />
+  </section>
+
+  <section v-else-if="tab === 'abs'">
+    <h2>Отпуска, больничные и отгулы: задачи, которые никто не закроет</h2>
+    <p class="lead">Сотрудник в отпуске или на больничном, а на нём висят задачи спринта в бэклоге, в работе или в реворке. Они не закроются, пока его нет, и план спринта не выполнится, если их не переназначить. Отпуска (трудовой и без содержания) — из Bitrix, больничные и «отпросился» (от 2 часов за день) — из Telegram-группы «Adata Group». Метка «конец спринта» — отсутствие попадает на последние 2 дня спринта, где у сотрудника есть незакрытые задачи. {{ absSrc }}</p>
+    <div class="tools">
+      <label class="gf"><span>Показывать отсутствия на ближайшие, дн.</span><input v-model.number="ctl.aH" type="number" min="0" max="60"></label>
+      <label class="chk"><input v-model="ctl.aRisk" type="checkbox"> Только с задачами</label>
+    </div>
+    <div class="psum" v-html="absSum" />
+    <SortTable :cols="absCols" :rows="absRowsTab" :init="[2, 'asc']" />
   </section>
 
   <section v-else-if="tab === 'need'">

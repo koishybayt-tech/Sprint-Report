@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -40,6 +41,19 @@ func loadReport(r *http.Request, pool *pgxpool.Pool) (*metrics.SprintReport, err
 		return nil, err
 	}
 	rep := metrics.BuildSprintReport(issues, leads, tl, futures, si, *last)
+
+	// Отсутствия, не закончившиеся к дате среза (Bitrix, позже Telegram).
+	day := last.In(metrics.Almaty)
+	abs, err := db.Absences(ctx, pool, time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		return nil, err
+	}
+	syncs, err := db.LastSyncs(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	delete(syncs, "jira")
+	metrics.AttachAbsences(&rep, abs, syncs)
 	return &rep, nil
 }
 

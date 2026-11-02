@@ -20,6 +20,8 @@ export type ApiReport = {
   logins: Record<string, string>
   team_leads: string[]
   inactive: string[]
+  absences: { name: string; type: 'vac' | 'bs' | 'sick' | 'off'; from: string; to: string | null; source: string; note: string }[]
+  absences_at: Record<string, string>
   testing: Record<string, Record<string, { n: number; logins: string[] }>>
   next: Record<string, { next_id: number; next_name: string; next_start?: string; next_end?: string; next_total: number
     statuses: NameCount[]; by: NameCount[] }>
@@ -67,6 +69,10 @@ export function buildModel(r: ApiReport) {
     QX: r.testers, X: r.bottlenecks, U: r.logins, POS: r.roles, TL: r.team_leads, TST: r.testing,
     INACT: r.inactive,
     AX: r.people,
+    AB: r.absences.map(a => ({ n: a.name, ty: a.type, fr: a.from, to: a.to, src: a.source, note: a.note || '' })),
+    ABSAT: r.absences_at,
+    // SNAP — дата среза в Алматы (YYYY-MM-DD), как в шаблоне
+    SNAP: new Date(r.updated_at!).toLocaleDateString('sv-SE', { timeZone: 'Asia/Almaty' }),
     LEAD: (k: string) => PBY[k]?.lead || '—',
     pname: (k: string) => PBY[k]?.n || k,
     roleOf: (n: string) => r.roles[n] || '—',

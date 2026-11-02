@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Отчёт «Спринты» — повторяет reference/sprints/page_template.html. Колонки вкладок перенесены оттуда 1-в-1.
-// Вкладки по людям — в components/SprintsPeople.vue. «Отсутствия» появятся с Bitrix/Telegram.
+// Вкладки по людям и «Отсутствия» — в components/SprintsPeople.vue.
 import { type ApiReport, type Col, type P, UNASSIGNED, buildModel, esc, fmt, jiraLinks, lvl, pct, sumOf } from '~/utils/sprints'
 import { defaultCtl, peopleLogic, switchTip } from '~/utils/sprintsPeople'
 
@@ -14,12 +14,12 @@ const m = computed(() => data.value?.updated_at ? buildModel(data.value) : null)
 // ---------- фильтр по руководителю и вкладка (в query-строке) ----------
 const lead = ref(String(route.query.lead ?? ''))
 const TABS = [
-  ['dash', 'Дэшборды'], ['sprint', 'Статус спринтов'], ['people', 'Загрузка ресурсов'], ['lres', 'Ресурсы по руководителям'],
+  ['dash', 'Дэшборды'], ['sprint', 'Статус спринтов'], ['people', 'Загрузка ресурсов'], ['lres', 'Ресурсы по руководителям'], ['abs', 'Отсутствия'],
   ['need', 'Нужны задачи'], ['over', 'Перегружены'], ['switch', 'Переключаются между проектами'], ['tl', 'Тимлиды и бэклог'],
   ['qa', 'Загрузка QA'], ['block', 'Узкие места'], ['stab', 'Стабильность'], ['qual', 'Качество'],
   ['rel', 'Готовность к релизу'], ['next', 'Следующий спринт'], ['dq', 'Качество данных'],
 ] as const
-const PEOPLE_TABS = ['dash', 'people', 'lres', 'need', 'over', 'switch', 'tl']
+const PEOPLE_TABS = ['dash', 'people', 'lres', 'abs', 'need', 'over', 'switch', 'tl']
 const tab = ref(String(route.query.tab ?? 'dash'))
 watch([lead, tab], ([l, t]) => router.replace({ query: { ...route.query, lead: l || undefined, tab: t === 'dash' ? undefined : t } }))
 
@@ -40,9 +40,9 @@ const updated = computed(() => {
 
 // ---------- пороги вкладок по людям и их логика ----------
 const ctl = useState('sprints-ctl', defaultCtl)
-const pl = computed(() => peopleLogic(m.value!, ctl.value, inS))
+const pl = computed(() => peopleLogic(m.value!, ctl.value, inS, () => scope.value.size === PR.value.length))
 
-// ---------- KPI (без «отсутствуют, а задачи висят» — нет данных об отсутствиях) ----------
+// ---------- KPI ----------
 const kpis = computed(() => {
   const P = scopedP.value, T = sumOf(P, 't'), stuck = P.filter(p => p.left < 0).length, NSD = m.value!.NSD
   const people = Object.keys(m.value!.PEOPLE), need = people.filter(pl.value.needVisible).length, sw = people.filter(pl.value.switchVisible).length
@@ -51,6 +51,7 @@ const kpis = computed(() => {
     [stuck, 'спринтов не закрыто', stuck ? 'bad' : '', 'sprint'],
     [need, 'сотрудникам нужны задачи', need ? 'warn' : '', 'need'], [people.filter(pl.value.overVisible).length, 'перегружены бэклогом', 'bad', 'over'],
     [sw, 'тормозят чужой проект', sw ? 'bad' : '', 'switch'],
+    [pl.value.absVisibleRisk(), 'отсутствуют, а задачи висят', pl.value.absVisibleRisk() ? 'bad' : '', 'abs'],
     [P.filter(p => !NSD[p.k] || !NSD[p.k].t).length, 'нет следующего спринта (или пустой)', P.some(p => (!NSD[p.k] || !NSD[p.k].t) && p.left <= 3) ? 'bad' : '', 'next'],
     [sumOf(P, 'blk'), 'в Blocked', 'bad', 'block'], [sumOf(P, 'bl'), 'в бэклоге', '', 'people'],
   ] as [string | number, string, string, string][]

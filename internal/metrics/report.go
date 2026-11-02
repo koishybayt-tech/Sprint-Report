@@ -76,8 +76,10 @@ type SprintReport struct {
 	Roles       map[string]string                   `json:"roles"`  // POS: самая частая «Должность» по задачам человека
 	Logins      map[string]string                   `json:"logins"` // U: имя → логин Jira
 	TeamLeads   []string                            `json:"team_leads"`
-	Inactive    []string                            `json:"inactive"` // INACT: деактивированные в Jira исполнители
-	Testing     map[string]map[string]*TestingCount `json:"testing"`  // проект → тестировщик ("" — пусто) → задачи в Test
+	Inactive    []string                            `json:"inactive"`    // INACT: деактивированные в Jira исполнители
+	Absences    []Absence                           `json:"absences"`    // ABS: текущие и будущие отсутствия
+	AbsencesAt  map[string]time.Time                `json:"absences_at"` // ABSAT: последняя синхронизация по источнику
+	Testing     map[string]map[string]*TestingCount `json:"testing"`     // проект → тестировщик ("" — пусто) → задачи в Test
 	Next        map[string]NextSprint               `json:"next"`
 }
 

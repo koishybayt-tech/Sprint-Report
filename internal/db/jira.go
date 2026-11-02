@@ -122,3 +122,38 @@ func TeamLeads(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	}
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
+
+// Absences — отсутствия, которые ещё не закончились на дату day (или без даты окончания).
+func Absences(ctx context.Context, pool *pgxpool.Pool, day time.Time) ([]metrics.AbsenceRow, error) {
+	rows, err := pool.Query(ctx, `SELECT coalesce(e.jira_login, ''), e.full_name, a.kind, a.date_from, a.date_to, a.source, coalesce(a.note, '')
+		FROM absences a JOIN employees e ON e.id = a.employee_id
+		WHERE a.date_to IS NULL OR a.date_to >= $1
+		ORDER BY a.date_from, e.full_name`, day)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (metrics.AbsenceRow, error) {
+		var a metrics.AbsenceRow
+		err := r.Scan(&a.Login, &a.FullName, &a.Kind, &a.From, &a.To, &a.Source, &a.Note)
+		return a, err
+	})
+}
+
+// LastSyncs — время последней успешной синхронизации по каждому источнику.
+func LastSyncs(ctx context.Context, pool *pgxpool.Pool) (map[string]time.Time, error) {
+	rows, err := pool.Query(ctx, `SELECT source, max(finished_at) FROM sync_runs WHERE ok GROUP BY source`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := map[string]time.Time{}
+	for rows.Next() {
+		var s string
+		var t time.Time
+		if err := rows.Scan(&s, &t); err != nil {
+			return nil, err
+		}
+		m[s] = t
+	}
+	return m, rows.Err()
+}
