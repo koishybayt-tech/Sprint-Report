@@ -6,6 +6,6 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const { me, load } = useMe()
   if (!me.value) await load()
   if (!me.value) return navigateTo({ path: '/login', query: to.fullPath !== '/' ? { next: to.fullPath } : {} })
-  // HR не видит «Спринты» (docs/security.md) — ведём в настройки, других отчётов для него пока нет.
-  if (to.path.startsWith('/sprints') && !canSeeSprints(me.value)) return navigateTo('/settings')
+  // HR не видит «Спринты» (docs/security.md) — ведём в «Посещаемость».
+  if (to.path.startsWith('/sprints') && !canSeeSprints(me.value)) return navigateTo('/attendance')
 })

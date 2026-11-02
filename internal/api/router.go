@@ -31,6 +31,8 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 			r.Get("/me", ah.me)
 			r.Post("/me/password", ah.changeOwnPassword)
 
+			r.Get("/attendance", attendance(pool, log)) // видимость — по роли внутри
+
 			// Спринты: все, кроме hr.
 			r.Group(func(r chi.Router) {
 				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee))

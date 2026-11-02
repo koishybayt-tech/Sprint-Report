@@ -20,7 +20,7 @@ import (
 // runSeed загружает справочники из CSV. Повторный запуск безопасен: записи обновляются, а не дублируются.
 func runSeed(ctx context.Context, log *slog.Logger, args []string) error {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
-	dir := fs.String("dir", "seed", "каталог с employees.csv, tg_aliases.csv, holidays_kz.csv")
+	dir := fs.String("dir", "seed", "каталог с employees.csv, tg_aliases.csv, holidays_kz.csv, management.csv")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -47,6 +47,7 @@ func runSeed(ctx context.Context, log *slog.Logger, args []string) error {
 		{"employees.csv", seedEmployees},
 		{"tg_aliases.csv", seedAliases},
 		{"holidays_kz.csv", seedHolidays},
+		{"management.csv", seedManagement},
 	}
 	for _, s := range steps {
 		rows, err := readCSV(filepath.Join(*dir, s.file))
@@ -181,4 +182,22 @@ func nullable(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// management.csv: full_name — руководящий состав. Не входит в «коллектив» при расчёте % опаздывающих.
+// Список заменяется целиком; кого нет в справочнике, пропускаем.
+func seedManagement(ctx context.Context, tx pgx.Tx, rows []map[string]string) (int, int, error) {
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r["full_name"])
+	}
+	if _, err := tx.Exec(ctx, `UPDATE employees SET management = full_name = ANY($1), updated_at = now()
+		WHERE management IS DISTINCT FROM (full_name = ANY($1))`, names); err != nil {
+		return 0, 0, err
+	}
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM employees WHERE management`).Scan(&n); err != nil {
+		return 0, 0, err
+	}
+	return n, len(names) - n, nil
 }
