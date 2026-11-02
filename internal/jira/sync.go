@@ -35,6 +35,7 @@ type SyncStats struct {
 	FutureSprints int `json:"future_sprints"`
 	BoardErrors   int `json:"board_errors"`
 	TeamLeads     int `json:"team_leads"`
+	NewEmployees  int `json:"new_employees"` // добавлено в справочник из Jira
 }
 
 // FullSync забирает задачи активных и будущих спринтов, проекты с лидами и будущие спринты досок
@@ -193,6 +194,12 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 	}
 	st.FutureSprints = len(futures)
 
+	n, err := upsertPeople(ctx, tx, append(issues, futureIssues...))
+	if err != nil {
+		return fmt.Errorf("справочник сотрудников: %w", err)
+	}
+	st.NewEmployees = n
+
 	if tlErr == nil {
 		if _, err := tx.Exec(ctx, `DELETE FROM jira_team_leads`); err != nil {
 			return err
@@ -257,4 +264,54 @@ func nullStr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// upsertPeople пополняет справочник сотрудников всеми, кто встречается в задачах (исполнители и тестировщики),
+// чтобы их можно было выбрать при привязке Telegram. Ручные данные из seed не перетираются:
+//   - сотрудник с этим логином есть — обновляется только jira_active;
+//   - есть сотрудник с тем же ФИО без логина — ему проставляется логин;
+//   - иначе добавляется новый.
+//
+// Возвращает число добавленных.
+func upsertPeople(ctx context.Context, tx pgx.Tx, issues []Issue) (int, error) {
+	people := map[string]User{}
+	for _, is := range issues {
+		for _, u := range []*User{is.Assignee, is.Tester} {
+			if u != nil && u.Name != "" && strings.TrimSpace(u.DisplayName) != "" {
+				people[u.Name] = *u
+			}
+		}
+	}
+	added := 0
+	for login, u := range people {
+		name := strings.TrimSpace(u.DisplayName)
+		tag, err := tx.Exec(ctx, `UPDATE employees SET jira_active = $2, updated_at = now() WHERE jira_login = $1 AND jira_active <> $2`, login, u.Active)
+		if err != nil {
+			return added, err
+		}
+		if tag.RowsAffected() > 0 {
+			continue
+		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM employees WHERE jira_login = $1)`, login).Scan(&exists); err != nil {
+			return added, err
+		}
+		if exists {
+			continue
+		}
+		tag, err = tx.Exec(ctx, `UPDATE employees SET jira_login = $1, jira_active = $3, updated_at = now() WHERE full_name = $2 AND jira_login IS NULL`, login, name, u.Active)
+		if err != nil {
+			return added, err
+		}
+		if tag.RowsAffected() > 0 {
+			continue
+		}
+		tag, err = tx.Exec(ctx, `INSERT INTO employees (full_name, jira_login, jira_active, staff) VALUES ($1, $2, $3, false)
+			ON CONFLICT (full_name) DO NOTHING`, name, login, u.Active)
+		if err != nil {
+			return added, err
+		}
+		added += int(tag.RowsAffected())
+	}
+	return added, nil
 }

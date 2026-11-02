@@ -39,6 +39,13 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger) http.Handler {
 				r.Get("/sprints/report", sprintReport(pool, log))
 			})
 
+			// Очередь «Кто это?» (Telegram → сотрудник): admin и hr.
+			r.Route("/admin/tg", func(r chi.Router) {
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleHR))
+				r.Get("/unknown", tgUnknown(pool, log))
+				r.Post("/aliases", tgMapAuthor(pool, log))
+			})
+
 			// Управление пользователями: только admin.
 			r.Route("/admin/users", func(r chi.Router) {
 				r.Use(requireRole(auth.RoleAdmin))

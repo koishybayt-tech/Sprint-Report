@@ -100,7 +100,7 @@ func (b *Bot) Run(ctx context.Context) {
 	b.log.Info("tg bot: приём сообщений запущен")
 	var offset int64
 	backoff := time.Second
-	reload := time.NewTicker(time.Hour)
+	reload := time.NewTicker(5 * time.Minute) // подхватить привязки, сделанные вручную в «Настройках»
 	defer reload.Stop()
 	for ctx.Err() == nil {
 		select {

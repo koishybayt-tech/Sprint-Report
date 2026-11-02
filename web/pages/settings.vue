@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Настройки: смена своего пароля (все) и пользователи сервиса (только admin).
+// Настройки: смена своего пароля (все), «Telegram: кто это?» (admin, hr), пользователи сервиса (только admin).
 import type { Me } from '~/composables/useMe'
 
 type User = Me & { active: boolean; created_at: string; last_login_at: string | null }
@@ -21,6 +21,41 @@ async function changePassword() {
     pw.current = pw.next = pw.repeat = ''
     pw.msg = 'Пароль изменён. Другие ваши сессии закрыты.'
   } catch (e) { pw.err = errText(e) } finally { pw.busy = false }
+}
+
+// ---------- Telegram: кто это? (admin, hr) ----------
+type TgAuthor = { from_id: number | null; from_name: string; messages: number; last_at: string; sample: string }
+type JiraUser = { id: number; full_name: string; jira_login: string; active: boolean }
+const canMapTg = computed(() => me.value?.role === 'admin' || me.value?.role === 'hr')
+const tgAuthors = ref<TgAuthor[]>([])
+const tgUsers = ref<JiraUser[]>([])
+const tgErr = ref('')
+const tgPick = ref<Record<string, number | ''>>({})
+const tgBusy = ref<Record<string, boolean>>({})
+const tgRowErr = ref<Record<string, string>>({})
+const tgDone = ref('')
+const tgOptions = computed(() => tgUsers.value.map(u => ({ value: u.id, label: u.full_name, hint: u.active ? u.jira_login : `${u.jira_login} · неактивен в Jira` })))
+const authorKey = (a: TgAuthor) => (a.from_id ?? '') + '|' + a.from_name
+async function loadTg() {
+  if (!canMapTg.value) return
+  try {
+    const r = await $fetch<{ authors: TgAuthor[]; employees: JiraUser[] }>(`${apiBase}/admin/tg/unknown`)
+    tgAuthors.value = r.authors; tgUsers.value = r.employees; tgErr.value = ''
+  } catch (e) { tgErr.value = errText(e) }
+}
+onMounted(loadTg)
+async function mapAuthor(a: TgAuthor) {
+  const k = authorKey(a), emp = tgPick.value[k]
+  if (!emp) { tgRowErr.value = { ...tgRowErr.value, [k]: 'Выберите пользователя Jira' }; return }
+  tgBusy.value = { ...tgBusy.value, [k]: true }; tgRowErr.value = { ...tgRowErr.value, [k]: '' }
+  try {
+    const r = await $fetch<{ messages: number; events: number }>(`${apiBase}/admin/tg/aliases`, {
+      method: 'POST', body: { from_id: a.from_id, from_name: a.from_name, employee_id: emp },
+    })
+    const u = tgUsers.value.find(x => x.id === emp)
+    tgDone.value = `«${a.from_name}» → ${u?.full_name ?? 'сотрудник'}: разобрано сообщений ${r.messages}, событий посещаемости ${r.events}.`
+    await loadTg()
+  } catch (e) { tgRowErr.value = { ...tgRowErr.value, [k]: errText(e) } } finally { tgBusy.value = { ...tgBusy.value, [k]: false } }
 }
 
 // ---------- пользователи ----------
@@ -90,6 +125,33 @@ async function resetPassword(u: User) {
         </div>
       </form>
       <p class="sub">Не короче 10 символов.</p>
+    </section>
+
+    <section v-if="canMapTg" class="card">
+      <h2>Telegram: кто это?</h2>
+      <p class="lead">Аккаунты в группе «Adata Group», чьи сообщения о посещаемости не удалось связать с сотрудником. Выберите, кто это в Jira, — все прошлые сообщения этого человека разберутся заново и появятся в отчётах. В списке Jira — только пользователи, ещё не связанные с Telegram.</p>
+      <p v-if="tgDone" class="ok-text" role="status">{{ tgDone }}</p>
+      <p v-if="tgErr" class="form-error">{{ tgErr }}</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Аккаунт Telegram</th><th class="n">Сообщений</th><th>Последнее</th><th>Начало сообщения</th><th>Пользователь Jira</th><th /></tr></thead>
+          <tbody>
+            <tr v-for="a in tgAuthors" :key="authorKey(a)">
+              <td><b>{{ a.from_name || 'без имени' }}</b><div v-if="!a.from_id" class="sub">без Telegram ID (из HTML-экспорта)</div></td>
+              <td class="n">{{ a.messages }}</td>
+              <td class="sub">{{ dt(a.last_at) }}</td>
+              <td class="wrap"><span class="sub">{{ a.sample || '—' }}</span></td>
+              <td>
+                <SearchSelect v-model="tgPick[authorKey(a)]" :options="tgOptions" placeholder="Найти по ФИО или логину" :label="`Пользователь Jira для ${a.from_name}`" />
+                <div v-if="tgRowErr[authorKey(a)]" class="form-error">{{ tgRowErr[authorKey(a)] }}</div>
+              </td>
+              <td><button class="btn" :disabled="tgBusy[authorKey(a)] || !tgPick[authorKey(a)]" @click="mapAuthor(a)">{{ tgBusy[authorKey(a)] ? 'Сохраняю…' : 'Сохранить' }}</button></td>
+            </tr>
+            <tr v-if="!tgAuthors.length && !tgErr"><td colspan="6" class="sub empty">Все авторы сообщений о посещаемости опознаны</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">Свободных пользователей Jira: {{ tgUsers.length }}.</p>
     </section>
 
     <template v-if="isAdmin">

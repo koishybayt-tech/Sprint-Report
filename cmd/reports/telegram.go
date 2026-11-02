@@ -134,7 +134,7 @@ func runImportTelegram(ctx context.Context, log *slog.Logger, args []string) err
 			names = append(names, n)
 		}
 		sort.Slice(names, func(a, b int) bool { return unknown[names[a]] > unknown[names[b]] })
-		fmt.Println("\nАвтор не найден (имя аккаунта → сообщений про посещаемость). Добавьте их в seed/tg_aliases.csv:")
+		fmt.Println("\nАвтор не найден (имя аккаунта → сообщений про посещаемость). Привяжите их в «Настройки» → «Telegram: кто это?»:")
 		for _, n := range names {
 			fmt.Printf("  %-30s %d\n", n, unknown[n])
 		}

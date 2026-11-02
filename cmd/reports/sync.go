@@ -67,7 +67,7 @@ func syncJira(ctx context.Context, log *slog.Logger, cfg config.Config, client *
 		return err
 	}
 	log.Info("sync jira: готово", "issues", st.Issues, "future_issues", st.FutureIssues, "projects", st.Projects,
-		"sprints", st.Sprints, "future_sprints", st.FutureSprints, "team_leads", st.TeamLeads,
+		"sprints", st.Sprints, "future_sprints", st.FutureSprints, "team_leads", st.TeamLeads, "new_employees", st.NewEmployees,
 		"board_errors", st.BoardErrors, "took", time.Since(t0).Round(time.Second).String())
 	return nil
 }

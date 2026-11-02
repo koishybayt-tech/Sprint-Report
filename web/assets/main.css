@@ -153,3 +153,15 @@ td select{font-size:13px;padding:4px 8px}
 .issued{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--warn-soft);border:1px solid var(--warn);border-radius:8px;padding:10px 12px;font-size:13px}
 .issued code{font:600 15px var(--f-mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:3px 8px;user-select:all}
 tr.inactive td{color:var(--muted)}
+/* Выпадающий список с поиском (SearchSelect) */
+.ss{position:relative;min-width:260px}
+.ss-input{width:100%;font:13px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 28px 6px 10px}
+.ss.open .ss-input{border-color:var(--accent)}
+.ss-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);font:16px/1 var(--f-body);color:var(--muted);background:none;border:0;cursor:pointer;padding:2px 4px}
+.ss-clear:hover{color:var(--fg)}
+.ss-list{position:fixed;z-index:60;max-height:260px;overflow-y:auto;margin:0;padding:4px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgb(0 0 0/.15)}
+.ss-list li{display:flex;justify-content:space-between;gap:10px;padding:6px 8px;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap}
+.ss-list li .sub{font-family:var(--f-mono)}
+.ss-list li.active{background:var(--accent-soft)}
+.ss-list li.chosen{font-weight:600}
+.ss-list li.ss-empty{cursor:default}

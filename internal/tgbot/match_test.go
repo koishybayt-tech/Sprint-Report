@@ -120,6 +120,7 @@ func TestResolveOrder(t *testing.T) {
 		{EmployeeID: 1, FullName: "Алмабаев Асанәлі", Displays: []string{"Assan"}, UserIDs: []int64{111}},
 		{EmployeeID: 2, FullName: "Халел Санжар", Displays: []string{"Санжар"}},
 		{EmployeeID: 3, FullName: "Нұрғали Санжар", Displays: []string{"Санжар"}, Usernames: []string{"snurgali"}},
+		{EmployeeID: 4, FullName: "Муратбай Әбілмансур"},
 	})
 	cases := []struct {
 		uid              int64
@@ -131,7 +132,9 @@ func TestResolveOrder(t *testing.T) {
 		{0, "@SNurgali", "", "", 3, ByUsername},
 		{0, "", "Assan", "Санжар Халел\nПропуск 9:00-10:00", 2, ByFIO}, // ФИО важнее имени аккаунта, порядок слов не важен
 		{0, "", "Assan", "Алмабаев Асанали Ерланович\nПропуск 9-10", 1, ByFIO},
+		{0, "", "?", "Муратбай Абильмансур\nПропуск 9-10", 4, ByFIO}, // мягкий знак и казахские буквы не мешают
 		{0, "", "Assan", "Пропуск 9-10", 1, ByDisplay},
+		{0, "", "  ASSAN 🏴‍☠️", "upd", 1, ByDisplay},   // эмодзи и регистр в имени аккаунта не мешают
 		{0, "", "Санжар", "Пропуск 9-10", 0, NotFound}, // два «Санжара» — не угадываем
 	}
 	for _, c := range cases {

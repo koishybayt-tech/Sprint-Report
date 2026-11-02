@@ -126,6 +126,9 @@ var foldRunes = map[rune]rune{'ә': 'а', 'і': 'и', 'ү': 'у', 'ұ': 'у', '�
 func nameWords(s string) []string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(s) {
+		if r == 'ь' || r == 'ъ' {
+			continue // «Абильмансур» и «Әбілмансур» — одно имя
+		}
 		if f, ok := foldRunes[r]; ok {
 			r = f
 		}
@@ -141,7 +144,10 @@ func nameWords(s string) []string {
 	return w
 }
 
-func normDisplay(s string) string { return strings.Join(strings.Fields(strings.ToLower(s)), " ") }
+// normDisplay: имя аккаунта без эмодзи и значков — «Алек» и «Алек🏴‍☠️» одно имя (люди украшают ник, а не меняют его).
+func normDisplay(s string) string {
+	return strings.Join(strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }), " ")
+}
 
 func containsID(xs []int64, id int64) bool {
 	for _, x := range xs {
