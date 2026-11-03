@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/adata/reports/internal/api"
 	"github.com/adata/reports/internal/bitrix"
 	"github.com/adata/reports/internal/config"
@@ -56,7 +58,8 @@ func runServe(ctx context.Context, log *slog.Logger) error {
 // историю задач года для карточки сотрудника (каждые JIRA_SYNC_EVERY, первая загрузка — полная),
 // всё это — только в рабочее время SYNC_HOURS (08:30–20:00 по Алматы),
 // и отпуска Bitrix (каждые BITRIX_SYNC_EVERY, 30m),
-// оба раза — сразу при старте, и принимает сообщения группы ботом Telegram.
+// запуск — когда с прошлой попытки прошёл интервал (проверка раз в минуту, переживает сон компьютера),
+// и принимает сообщения группы ботом Telegram.
 // Без JIRA_PAT / BITRIX_API_KEY / TG_BOT_TOKEN+TG_CHAT_ID соответствующая часть выключена.
 func runWorker(ctx context.Context, log *slog.Logger) error {
 	cfg, err := config.Load()
@@ -125,8 +128,18 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 			log.Error("worker: синхронизация Bitrix", "err", err)
 		}
 	}
-	runJira()
-	runBitrix()
+	// Расписание — по настенным часам и времени последней попытки в sync_runs, проверка раз в минуту.
+	// Тикеры «каждые 30 минут» не годятся: после сна компьютера (Docker стоит на паузе) они продолжают отсчёт
+	// с места остановки, и утром синхронизация запускалась бы с опозданием до получаса.
+	runDue := func() {
+		if due(ctx, pool, "jira", cfg.JiraSyncEvery) {
+			runJira()
+		}
+		if due(ctx, pool, "bitrix", cfg.BitrixSyncEvery) {
+			runBitrix()
+		}
+	}
+	runDue()
 	// Пятница, TG_SATURDAY_AT (20:30): кто отрабатывает в субботу — в группу «Adata Group», один раз на субботу.
 	// Не зависит от SYNC_HOURS: сообщения группы бот принимает круглосуточно, данные свежие.
 	if cfg.TgSaturdayAt != "off" && cfg.TgBotToken != "" && cfg.TgChatID != 0 {
@@ -152,10 +165,10 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 	// История задач за год (карточка сотрудника) — отдельно: первая загрузка идёт ~20 минут и не должна держать остальное.
 	if client != nil {
 		go func() {
-			t := time.NewTicker(cfg.JiraSyncEvery)
+			t := time.NewTicker(time.Minute)
 			defer t.Stop()
 			for {
-				if cfg.InSyncHours(time.Now()) {
+				if cfg.InSyncHours(time.Now()) && due(ctx, pool, "jira_history", cfg.JiraSyncEvery) {
 					if err := syncJiraHistory(ctx, log, client, pool, false); err != nil && ctx.Err() == nil {
 						log.Error("worker: история Jira", "err", err)
 					}
@@ -171,10 +184,6 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 
 	heartbeat := time.NewTicker(time.Minute)
 	defer heartbeat.Stop()
-	jiraTick := time.NewTicker(cfg.JiraSyncEvery)
-	defer jiraTick.Stop()
-	bitrixTick := time.NewTicker(cfg.BitrixSyncEvery)
-	defer bitrixTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -182,12 +191,19 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 			return nil
 		case <-heartbeat.C:
 			log.Info("worker: жив")
-		case <-jiraTick.C:
-			runJira()
-		case <-bitrixTick.C:
-			runBitrix()
+			runDue()
 		}
 	}
+}
+
+// due — пора ли запускать источник: с последней попытки (успешной или нет) прошло не меньше every.
+// Без прошлых попыток — пора. Ошибка чтения БД — не пора (попробуем через минуту).
+func due(ctx context.Context, pool *pgxpool.Pool, source string, every time.Duration) bool {
+	var last *time.Time
+	if err := pool.QueryRow(ctx, `SELECT max(started_at) FROM sync_runs WHERE source = $1`, source).Scan(&last); err != nil {
+		return false
+	}
+	return last == nil || time.Since(*last) >= every
 }
 
 func runMigrate(ctx context.Context, log *slog.Logger) error {
