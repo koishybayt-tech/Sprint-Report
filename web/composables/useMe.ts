@@ -25,7 +25,9 @@ export const canSeeSnapshots = (me: Me | null) => !!me && (me.role === 'admin' |
 // «Контроль спринта руководителей» — admin и lead (docs/lead-control.md).
 // Плюс любой пользователь, которому админ назначил проекты («Настройки → Руководители и проекты»), например ПМ.
 export const canSeeLeadControl = (me: Me | null) => (canSeeSnapshots(me) || !!me?.has_projects) && hasModule(me, 'lead_control')
-export const canSeeAttendance = (me: Me | null) => hasModule(me, 'attendance')
+// Экран для ТВ (/tv) — пока только администратор; расширять доступ — здесь и в middleware.
+export const canSeeTv = (me: Me | null) => !!me && me.role === 'admin'
+export const canSeeAttendance =(me: Me | null) => hasModule(me, 'attendance')
 export const canSeeEmployees = (me: Me | null) => hasModule(me, 'employees')
 
 // Первая доступная страница: после входа и при переходе на закрытый модуль. «Настройки» открыты всем.

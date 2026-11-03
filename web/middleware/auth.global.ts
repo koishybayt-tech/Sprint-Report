@@ -11,6 +11,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Отдельной страницы снепшотов больше нет — они открываются в «Спринтах».
   if (to.path.startsWith('/snapshots')) return navigateTo({ path: '/sprints', query: typeof to.query.date === 'string' ? { snap: to.query.date } : {} })
   if (to.path.startsWith('/lead-control') && !canSeeLeadControl(me.value)) return navigateTo(firstPage(me.value))
-  if (to.path.startsWith('/attendance') && !canSeeAttendance(me.value)) return navigateTo(firstPage(me.value))
+  if (to.path.startsWith('/tv') && !canSeeTv(me.value)) return navigateTo(firstPage(me.value))
+  if (to.path.startsWith('/attendance') &&!canSeeAttendance(me.value)) return navigateTo(firstPage(me.value))
   if (to.path.startsWith('/employee') && !canSeeEmployees(me.value)) return navigateTo(firstPage(me.value))
 })

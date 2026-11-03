@@ -13,7 +13,8 @@ const { theme, next: nextTheme } = useTheme()
         <NuxtLink v-if="canSeeLeadControl(me)" to="/lead-control" :class="{ on: route.path.startsWith('/lead-control') }">Контроль спринта</NuxtLink>
         <NuxtLink v-if="canSeeAttendance(me)" to="/attendance" :class="{ on: route.path.startsWith('/attendance') }">Посещаемость</NuxtLink>
         <NuxtLink v-if="canSeeEmployees(me)" :to="me.role === 'employee' && me.employee_id ? `/employee/${me.employee_id}` : '/employee'" :class="{ on: route.path.startsWith('/employee') }">Сотрудники</NuxtLink>
-        <NuxtLink to="/settings" :class="{ on: route.path.startsWith('/settings') }">Настройки</NuxtLink>
+        <NuxtLink v-if="canSeeTv(me)" to="/tv" :class="{ on: route.path.startsWith('/tv') }">ТВ</NuxtLink>
+        <NuxtLink to="/settings":class="{ on: route.path.startsWith('/settings') }">Настройки</NuxtLink>
       </nav>
       <NotifyBell v-if="canSeeLeadControl(me)" />
       <button class="theme-btn" type="button" :title="`${THEME_TITLES[theme]} — нажмите, чтобы сменить`" :aria-label="THEME_TITLES[theme]" @click="nextTheme">
