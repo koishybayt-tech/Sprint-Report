@@ -150,8 +150,16 @@ a.wl.same{border-color:var(--ok);background:var(--ok-soft)}
 .login-card label,.form-grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 .login-card input,.form-grid input,.form-grid select,td select{font:14px var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
 td select{font-size:13px;padding:4px 8px}
-.page-narrow{max-width:1100px;padding-top:16px;display:flex;flex-direction:column;gap:16px}
-.page-narrow h1{font-size:22px}
+.page-wide{padding-top:16px;display:flex;flex-direction:column;gap:16px}
+.page-wide h1{font-size:22px}
+/* «Настройки» на всю ширину: таблицы без внутренней прокрутки — ячейки переносятся, колонки делят место */
+.page-wide .tbl{overflow:visible;max-height:none}
+.page-wide th,.page-wide td{white-space:normal;vertical-align:top}
+.page-wide td.actions{white-space:normal}
+.page-wide td.actions>*{display:inline-block;margin:0 10px 4px 0}
+.page-wide td.mods{min-width:0}
+.page-wide td input,.page-wide td select{max-width:100%;min-width:0}
+@media (max-width:900px){.page-wide .tbl{overflow-x:auto}}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .card h2{margin:0}
 .form-grid{display:grid;gap:10px;max-width:420px}

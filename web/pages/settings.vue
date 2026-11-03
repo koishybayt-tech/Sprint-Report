@@ -216,7 +216,7 @@ async function resetPassword(u: User) {
 </script>
 
 <template>
-  <main class="page-narrow">
+  <main class="page-wide">
     <h1>Настройки</h1>
 
     <section class="card">
