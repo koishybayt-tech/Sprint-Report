@@ -79,6 +79,13 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 				})
 			})
 
+			// Экран для ТВ: по модулю tv (его выдаёт admin), независимо от роли и остальных модулей.
+			r.Route("/tv", func(r chi.Router) {
+				r.Use(requireModule(auth.ModTV))
+				r.Get("/report", sprintReport(pool, log))
+				r.Get("/lead-control", tvLeadControl(pool, log, cfg.JiraBaseURL))
+			})
+
 			// Очередь «Кто это?» (Telegram → сотрудник): admin и hr.
 			r.Route("/admin/tg", func(r chi.Router) {
 				r.Use(requireRole(auth.RoleAdmin, auth.RoleHR), requireModule(auth.ModAttendance))

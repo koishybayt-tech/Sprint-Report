@@ -50,9 +50,12 @@ const (
 	ModLeadControl = "lead_control"
 	ModAttendance  = "attendance"
 	ModEmployees   = "employees"
+	ModTV          = "tv" // экран для ТВ (/tv): никому не выдаётся сам, только админом вручную
 )
 
-var Modules = []string{ModSprints, ModLeadControl, ModAttendance, ModEmployees}
+// Modules — все модули; DefaultModules — что получает пользователь, если модули не указаны (ТВ — только явно).
+var Modules = []string{ModSprints, ModLeadControl, ModAttendance, ModEmployees, ModTV}
+var DefaultModules = []string{ModSprints, ModLeadControl, ModAttendance, ModEmployees}
 
 func validModule(m string) bool {
 	for _, x := range Modules {
@@ -63,10 +66,10 @@ func validModule(m string) bool {
 	return false
 }
 
-// NormalizeModules проверяет список модулей, убирает повторы и приводит к порядку Modules. nil → все модули.
+// NormalizeModules проверяет список модулей, убирает повторы и приводит к порядку Modules. nil → DefaultModules.
 func NormalizeModules(in []string) ([]string, error) {
 	if in == nil {
-		return append([]string{}, Modules...), nil
+		return append([]string{}, DefaultModules...), nil
 	}
 	seen := map[string]bool{}
 	for _, m := range in {

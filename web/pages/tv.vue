@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Экран для ТВ: все важные сигналы по спринтам на одной странице, без прокрутки. Обновляется сам (раз в 5 минут).
-// Данные — GET /sprints/report и /lead-control по каждому руководителю; расчёты — utils/tv.ts. Двойной клик — полный экран.
+// Данные — GET /tv/report и /tv/lead-control (доступ по модулю «ТВ»); расчёты — utils/tv.ts. Двойной клик — полный экран.
 import { type ApiReport, buildModel } from '~/utils/sprints'
 import { defaultCtl, peopleLogic } from '~/utils/sprintsPeople'
 import { type LcReport, TV, buildTv, daysLevel } from '~/utils/tv'
@@ -17,11 +17,10 @@ const err = ref('')
 
 async function load() {
   try {
-    const [r, leads] = await Promise.all([
-      $fetch<ApiReport>(`${apiBase}/sprints/report`),
-      $fetch<{ lead: string }[]>(`${apiBase}/lead-control/leads`),
+    const [r, reps] = await Promise.all([
+      $fetch<ApiReport>(`${apiBase}/tv/report`),
+      $fetch<LcReport[]>(`${apiBase}/tv/lead-control`),
     ])
-    const reps = await Promise.all(leads.map(l => $fetch<LcReport>(`${apiBase}/lead-control`, { query: { lead: l.lead } })))
     report.value = r; lc.value = reps; loadedAt.value = new Date(); err.value = ''
   } catch (e: any) {
     // Старые данные остаются на экране, пока не получится обновить.

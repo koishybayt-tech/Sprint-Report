@@ -159,7 +159,7 @@ async function copyIssued() {
   try { await navigator.clipboard.writeText(issued.value.password); copied.value = true } catch { copied.value = false }
 }
 
-const allModules = () => MODULES.map(m => m.key as string)
+const allModules = () => [...DEFAULT_MODULES]
 const form = reactive({ login: '', full_name: '', role: 'employee', employee_login: '', modules: allModules(), err: '', busy: false })
 
 // Галочка модуля у существующего пользователя сохраняется сразу; админу доступны все модули всегда.

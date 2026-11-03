@@ -55,8 +55,13 @@ func TestValidRole(t *testing.T) {
 
 func TestNormalizeModules(t *testing.T) {
 	all, err := NormalizeModules(nil)
-	if err != nil || len(all) != len(Modules) {
-		t.Fatalf("nil → все модули: %v %v", all, err)
+	if err != nil || len(all) != len(DefaultModules) || len(all) != len(Modules)-1 {
+		t.Fatalf("nil → модули по умолчанию: %v %v", all, err)
+	}
+	for _, m := range all {
+		if m == ModTV {
+			t.Fatal("ТВ не выдаётся по умолчанию")
+		}
 	}
 	got, err := NormalizeModules([]string{ModEmployees, ModSprints, ModSprints})
 	if err != nil || len(got) != 2 || got[0] != ModSprints || got[1] != ModEmployees {

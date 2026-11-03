@@ -7,7 +7,10 @@ export const MODULES = [
   { key: 'lead_control', title: 'Контроль спринта' },
   { key: 'attendance', title: 'Посещаемость' },
   { key: 'employees', title: 'Сотрудники' },
+  { key: 'tv', title: 'ТВ' },
 ] as const
+// Что отмечено по умолчанию при создании пользователя: ТВ выдаётся только вручную.
+export const DEFAULT_MODULES = MODULES.map(m => m.key as string).filter(k => k !== 'tv')
 export const hasModule = (me: Me | null, key: string) => !!me && (me.modules ?? []).includes(key)
 
 export const ROLE_TITLES: Record<Me['role'], string> = {
@@ -25,9 +28,9 @@ export const canSeeSnapshots = (me: Me | null) => !!me && (me.role === 'admin' |
 // «Контроль спринта руководителей» — admin и lead (docs/lead-control.md).
 // Плюс любой пользователь, которому админ назначил проекты («Настройки → Руководители и проекты»), например ПМ.
 export const canSeeLeadControl = (me: Me | null) => (canSeeSnapshots(me) || !!me?.has_projects) && hasModule(me, 'lead_control')
-// Экран для ТВ (/tv) — пока только администратор; расширять доступ — здесь и в middleware.
-export const canSeeTv = (me: Me | null) => !!me && me.role === 'admin'
-export const canSeeAttendance =(me: Me | null) => hasModule(me, 'attendance')
+// Экран для ТВ (/tv): админу и тем, кому выдан модуль «ТВ» (данные — /api/v1/tv/*).
+export const canSeeTv = (me: Me | null) => hasModule(me, 'tv')
+export const canSeeAttendance = (me: Me | null) => hasModule(me, 'attendance')
 export const canSeeEmployees = (me: Me | null) => hasModule(me, 'employees')
 
 // Первая доступная страница: после входа и при переходе на закрытый модуль. «Настройки» открыты всем.
@@ -36,6 +39,7 @@ export function firstPage(me: Me | null): string {
   if (canSeeLeadControl(me)) return '/lead-control'
   if (canSeeAttendance(me)) return '/attendance'
   if (canSeeEmployees(me)) return me && me.role === 'employee' && me.employee_id ? `/employee/${me.employee_id}` : '/employee'
+  if (canSeeTv(me)) return '/tv'
   return '/settings'
 }
 
