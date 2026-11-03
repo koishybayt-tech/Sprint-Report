@@ -16,16 +16,19 @@ type LeadProject struct {
 	ProjectKey string `json:"project_key"`
 	Title      string `json:"title"`
 	Position   int    `json:"position"`
+	UserID     *int64 `json:"user_id"`   // пользователь сервиса, которому назначен проект; nil — руководитель только по имени из Jira
+	UserName   string `json:"user_name"` // ФИО пользователя для показа; при записи игнорируется
 }
 
 func ListLeadProjects(ctx context.Context, pool *pgxpool.Pool) ([]LeadProject, error) {
-	rows, err := pool.Query(ctx, `SELECT lead, project_key, title, position FROM lead_projects ORDER BY lead, position, project_key`)
+	rows, err := pool.Query(ctx, `SELECT lp.lead, lp.project_key, lp.title, lp.position, lp.user_id, coalesce(u.full_name, '')
+		FROM lead_projects lp LEFT JOIN users u ON u.id = lp.user_id ORDER BY lp.lead, lp.position, lp.project_key`)
 	if err != nil {
 		return nil, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (LeadProject, error) {
 		var p LeadProject
-		err := r.Scan(&p.Lead, &p.ProjectKey, &p.Title, &p.Position)
+		err := r.Scan(&p.Lead, &p.ProjectKey, &p.Title, &p.Position, &p.UserID, &p.UserName)
 		return p, err
 	})
 	if out == nil {
@@ -34,15 +37,40 @@ func ListLeadProjects(ctx context.Context, pool *pgxpool.Pool) ([]LeadProject, e
 	return out, err
 }
 
-// SaveLeadProject добавляет пару или обновляет название и порядок существующей.
+// SaveLeadProject добавляет пару или обновляет название, порядок и пользователя существующей.
 func SaveLeadProject(ctx context.Context, pool *pgxpool.Pool, p LeadProject) error {
-	_, err := pool.Exec(ctx, `INSERT INTO lead_projects (lead, project_key, title, position) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (lead, project_key) DO UPDATE SET title = EXCLUDED.title, position = EXCLUDED.position`,
-		p.Lead, p.ProjectKey, p.Title, p.Position)
+	_, err := pool.Exec(ctx, `INSERT INTO lead_projects (lead, project_key, title, position, user_id) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (lead, project_key) DO UPDATE SET title = EXCLUDED.title, position = EXCLUDED.position, user_id = EXCLUDED.user_id`,
+		p.Lead, p.ProjectKey, p.Title, p.Position, p.UserID)
 	return err
 }
 
 var ErrNotFound = errors.New("не найдено")
+
+// UserLeadLabel — под каким именем пользователь значится руководителем: ФИО связанного сотрудника (как в Jira),
+// иначе его собственное ФИО. Только активные пользователи; иначе ErrNotFound.
+func UserLeadLabel(ctx context.Context, pool *pgxpool.Pool, userID int64) (string, error) {
+	var n string
+	err := pool.QueryRow(ctx, `SELECT coalesce(e.full_name, u.full_name) FROM users u LEFT JOIN employees e ON e.id = u.employee_id
+		WHERE u.id = $1 AND u.active`, userID).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return n, err
+}
+
+// UserLeads — руководители, под которыми пользователю назначены проекты.
+func UserLeads(ctx context.Context, pool *pgxpool.Pool, userID int64) ([]string, error) {
+	rows, err := pool.Query(ctx, `SELECT DISTINCT lead FROM lead_projects WHERE user_id = $1 ORDER BY lead`, userID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if out == nil {
+		out = []string{}
+	}
+	return out, err
+}
 
 func DeleteLeadProject(ctx context.Context, pool *pgxpool.Pool, lead, project string) error {
 	tag, err := pool.Exec(ctx, `DELETE FROM lead_projects WHERE lead = $1 AND project_key = $2`, lead, project)

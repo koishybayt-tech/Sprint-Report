@@ -36,15 +36,30 @@ func leadProjectsSave(pool *pgxpool.Pool, log *slog.Logger) http.HandlerFunc {
 			return
 		}
 		p.Lead, p.ProjectKey, p.Title = strings.TrimSpace(p.Lead), strings.ToUpper(strings.TrimSpace(p.ProjectKey)), strings.TrimSpace(p.Title)
+		if p.UserID != nil {
+			// Проект назначен пользователю: без явного имени руководитель берётся из его сотрудника или ФИО.
+			label, err := db.UserLeadLabel(r.Context(), pool, *p.UserID)
+			if errors.Is(err, db.ErrNotFound) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "пользователь не найден или заблокирован"})
+				return
+			}
+			if err != nil {
+				fail(w, log, "lead projects", err)
+				return
+			}
+			if p.Lead == "" {
+				p.Lead = label
+			}
+		}
 		if p.Lead == "" || !reProjectKey.MatchString(p.ProjectKey) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите руководителя и ключ проекта Jira (латиницей, например AC)"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите руководителя или пользователя и ключ проекта Jira (латиницей, например AC)"})
 			return
 		}
 		if err := db.SaveLeadProject(r.Context(), pool, p); err != nil {
 			fail(w, log, "lead projects", err)
 			return
 		}
-		log.Info("lead projects: сохранено", "lead", p.Lead, "project", p.ProjectKey)
+		log.Info("lead projects: сохранено", "lead", p.Lead, "project", p.ProjectKey, "user_id", p.UserID)
 		writeJSON(w, http.StatusOK, p)
 	}
 }

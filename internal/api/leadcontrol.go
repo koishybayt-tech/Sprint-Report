@@ -73,7 +73,7 @@ func (s *leadControlServer) UnignoreLeadControlGap(w http.ResponseWriter, r *htt
 }
 
 // leadControlServer реализует сгенерированный lcapi.ServerInterface (api/openapi.yaml, тег lead-control).
-// Доступ — admin и lead (requireRole в роутере); lead видит только себя.
+// Доступ — admin, lead и пользователи с назначенными проектами (requireLeadAccess в роутере); не-admin видит только свои проекты.
 type leadControlServer struct {
 	pool     *pgxpool.Pool
 	log      *slog.Logger
@@ -83,8 +83,8 @@ type leadControlServer struct {
 
 var _ lcapi.ServerInterface = (*leadControlServer)(nil)
 
-// visibleLeads — руководители, доступные пользователю: admin — все из справочника, lead — только он сам.
-// Первым идёт сам пользователь, если он есть в справочнике: «руководитель по умолчанию видит себя».
+// visibleLeads — руководители, доступные пользователю: admin — все из справочника, остальные — только свои:
+// он сам (по сотруднику) и те, под кем ему назначены проекты. Свои идут первыми: «по умолчанию видит себя».
 func (s *leadControlServer) visibleLeads(r *http.Request) ([]string, map[string][]leadcontrol.LeadProject, error) {
 	leads, by, err := db.LeadControlLeads(r.Context(), s.pool)
 	if err != nil {
@@ -95,24 +95,29 @@ func (s *leadControlServer) visibleLeads(r *http.Request) ([]string, map[string]
 	if err != nil {
 		return nil, nil, err
 	}
-	_, isLead := by[self]
-	isLead = isLead && self != ""
+	own := []string{}
+	if _, ok := by[self]; ok && self != "" {
+		own = append(own, self)
+	}
+	assigned, err := db.UserLeads(r.Context(), s.pool, u.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, l := range assigned {
+		if _, ok := by[l]; ok && !containsStr(own, l) {
+			own = append(own, l)
+		}
+	}
 	if u.Role != auth.RoleAdmin {
-		if isLead {
-			return []string{self}, by, nil
-		}
-		return []string{}, by, nil
+		return own, by, nil
 	}
-	if isLead {
-		out := []string{self}
-		for _, l := range leads {
-			if l != self {
-				out = append(out, l)
-			}
+	out := append([]string{}, own...)
+	for _, l := range leads {
+		if !containsStr(own, l) {
+			out = append(out, l)
 		}
-		return out, by, nil
 	}
-	return leads, by, nil
+	return out, by, nil
 }
 
 // GET /api/v1/lead-control/leads

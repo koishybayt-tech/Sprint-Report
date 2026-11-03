@@ -111,7 +111,7 @@ watch(ns, v => {
 onBeforeUnmount(() => clearInterval(nsTimer))
 
 // ---------- руководители и проекты («Контроль спринта руководителей») ----------
-type LeadProject = { lead: string; project_key: string; title: string; position: number }
+type LeadProject = { lead: string; project_key: string; title: string; position: number; user_id: number | null; user_name: string }
 const leadProjects = ref<LeadProject[]>([])
 const lpErr = ref('')
 async function loadLeadProjects() {
@@ -119,14 +119,17 @@ async function loadLeadProjects() {
   try { leadProjects.value = await $fetch<LeadProject[]>(`${apiBase}/admin/lead-projects`); lpErr.value = '' } catch (e) { lpErr.value = errText(e) }
 }
 onMounted(loadLeadProjects)
-const lpForm = reactive({ lead: '', project_key: '', title: '', position: 1, busy: false })
+const lpForm = reactive({ lead: '', user_id: '' as number | '', project_key: '', title: '', position: 1, busy: false })
+// Кому можно назначить проект: активные пользователи; у назначенного без модуля «Контроль спринта» проект не будет виден.
+const lpUsers = computed(() => users.value.filter(u => u.active))
+const lpNoModule = (x: LeadProject) => { const u = users.value.find(u => u.id === x.user_id); return !!u && u.role !== 'admin' && !u.modules.includes('lead_control') }
 const lpLeads = computed(() => [...new Set(leadProjects.value.map(x => x.lead))])
 async function saveLeadProject(x?: LeadProject) {
   lpErr.value = ''; lpForm.busy = true
   try {
-    const body = x || { lead: lpForm.lead, project_key: lpForm.project_key, title: lpForm.title, position: Number(lpForm.position) || 0 }
+    const body = x || { lead: lpForm.lead, user_id: lpForm.user_id === '' ? null : lpForm.user_id, project_key: lpForm.project_key, title: lpForm.title, position: Number(lpForm.position) || 0 }
     await $fetch(`${apiBase}/admin/lead-projects`, { method: 'POST', body })
-    if (!x) { lpForm.project_key = ''; lpForm.title = ''; lpForm.position = (Number(lpForm.position) || 0) + 1 }
+    if (!x) { lpForm.lead = ''; lpForm.project_key = ''; lpForm.title = ''; lpForm.position = (Number(lpForm.position) || 0) + 1 }
     await loadLeadProjects()
   } catch (e) { lpErr.value = errText(e) } finally { lpForm.busy = false }
 }
@@ -386,9 +389,15 @@ async function resetPassword(u: User) {
 
       <section class="card">
         <h2>Руководители и проекты</h2>
-        <p class="lead">Чьи проекты показывает «Контроль спринта руководителей». ФИО руководителя — как в Jira; ключ проекта — латиницей. Изменения попадут в отчёт после следующей синхронизации Jira.</p>
+        <p class="lead">Чьи проекты показывает «Контроль спринта руководителей». ФИО руководителя — как в Jira; ключ проекта — латиницей. Проект можно назначить пользователю сервиса — например, ПМу, который отвечает за проект, хотя руководитель в Jira другой: выберите пользователя, и проект появится у него в «Контроле спринта» (ему нужен модуль «Контроль спринта»). У одного проекта может быть несколько ответственных — у каждого он виден отдельно. Изменения попадут в отчёт после следующей синхронизации Jira.</p>
         <form class="form-grid cols" @submit.prevent="saveLeadProject()">
-          <label>Руководитель<input v-model="lpForm.lead" list="lp-leads" autocomplete="off" required placeholder="Қойшыбай Темірлан"></label>
+          <label>Пользователь <span class="sub">(необязательно)</span>
+            <select v-model="lpForm.user_id" aria-label="Пользователь, которому назначается проект">
+              <option value="">— руководитель по имени из Jira —</option>
+              <option v-for="u in lpUsers" :key="u.id" :value="u.id">{{ u.full_name }} ({{ u.login }})</option>
+            </select>
+          </label>
+          <label>Руководитель <span class="sub">{{ lpForm.user_id === '' ? '' : '(по умолчанию — ФИО пользователя)' }}</span><input v-model="lpForm.lead" list="lp-leads" autocomplete="off" :required="lpForm.user_id === ''" placeholder="Қойшыбай Темірлан"></label>
           <datalist id="lp-leads"><option v-for="l in lpLeads" :key="l" :value="l" /></datalist>
           <label>Ключ проекта<input v-model="lpForm.project_key" autocomplete="off" required placeholder="AC" style="text-transform:uppercase"></label>
           <label>Название для чипа<input v-model="lpForm.title" autocomplete="off" placeholder="Комплаенс"></label>
@@ -400,16 +409,24 @@ async function resetPassword(u: User) {
         </form>
         <div class="tbl">
           <table>
-            <thead><tr><th>Руководитель</th><th>Проект</th><th>Название</th><th>Порядок</th><th /></tr></thead>
+            <thead><tr><th>Руководитель</th><th>Пользователь</th><th>Проект</th><th>Название</th><th>Порядок</th><th /></tr></thead>
             <tbody>
               <tr v-for="x in leadProjects" :key="x.lead + x.project_key">
                 <td>{{ x.lead }}</td>
+                <td>
+                  <select :value="x.user_id ?? ''" :aria-label="`Пользователь для ${x.project_key} у ${x.lead}`"
+                    @change="saveLeadProject({ ...x, user_id: ($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value) })">
+                    <option value="">не назначен</option>
+                    <option v-for="u in lpUsers" :key="u.id" :value="u.id">{{ u.full_name }}</option>
+                  </select>
+                  <div v-if="lpNoModule(x)" class="form-error">нет модуля «Контроль спринта» — выдайте его в «Пользователи»</div>
+                </td>
                 <td><span class="key">{{ x.project_key }}</span></td>
                 <td><input :value="x.title" :aria-label="`Название ${x.project_key}`" @change="saveLeadProject({ ...x, title: ($event.target as HTMLInputElement).value })"></td>
                 <td><input :value="x.position" type="number" min="0" style="width:5em" :aria-label="`Порядок ${x.project_key}`" @change="saveLeadProject({ ...x, position: Number(($event.target as HTMLInputElement).value) || 0 })"></td>
                 <td><button class="linkbtn" @click="deleteLeadProject(x)">Убрать</button></td>
               </tr>
-              <tr v-if="!leadProjects.length"><td colspan="5" class="sub empty">Руководителей пока нет — выполните сид или добавьте выше</td></tr>
+              <tr v-if="!leadProjects.length"><td colspan="6" class="sub empty">Руководителей пока нет — выполните сид или добавьте выше</td></tr>
             </tbody>
           </table>
         </div>

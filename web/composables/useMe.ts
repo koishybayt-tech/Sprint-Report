@@ -1,5 +1,5 @@
 // Текущий пользователь (GET /api/v1/me). null — не вошёл.
-export type Me = { id: number; login: string; full_name: string; role: 'admin' | 'lead' | 'hr' | 'employee'; employee_id: number | null; modules: string[] }
+export type Me = { id: number; login: string; full_name: string; role: 'admin' | 'lead' | 'hr' | 'employee'; employee_id: number | null; modules: string[]; has_projects?: boolean }
 
 // Модули шапки: ключ совпадает с users.modules на сервере; у админа в me.modules всегда все.
 export const MODULES = [
@@ -23,7 +23,8 @@ export const canSeeSprints = (me: Me | null) => !!me && me.role !== 'hr' && hasM
 // Сохранять и удалять снепшоты «Спринтов» — admin и lead (docs/security.md).
 export const canSeeSnapshots = (me: Me | null) => !!me && (me.role === 'admin' || me.role === 'lead')
 // «Контроль спринта руководителей» — admin и lead (docs/lead-control.md).
-export const canSeeLeadControl = (me: Me | null) => canSeeSnapshots(me) && hasModule(me, 'lead_control')
+// Плюс любой пользователь, которому админ назначил проекты («Настройки → Руководители и проекты»), например ПМ.
+export const canSeeLeadControl = (me: Me | null) => (canSeeSnapshots(me) || !!me?.has_projects) && hasModule(me, 'lead_control')
 export const canSeeAttendance = (me: Me | null) => hasModule(me, 'attendance')
 export const canSeeEmployees = (me: Me | null) => hasModule(me, 'employees')
 

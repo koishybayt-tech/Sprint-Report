@@ -105,6 +105,7 @@ type User struct {
 	EmployeeID    *int64     `json:"employee_id"`
 	EmployeeLogin *string    `json:"employee_login"` // логин Jira связанного сотрудника
 	Modules       []string   `json:"modules"`        // у админа всегда все
+	HasProjects   bool       `json:"has_projects"`   // админ назначил пользователю проекты в «Контроле спринта»
 	Active        bool       `json:"active"`
 	CreatedAt     time.Time  `json:"created_at"`
 	LastLoginAt   *time.Time `json:"last_login_at"`
@@ -149,11 +150,12 @@ var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password-for-timing
 // ---------- пользователи ----------
 
 const userCols = `id, login, full_name, role, employee_id, active, created_at, last_login_at,
-	(SELECT jira_login FROM employees e WHERE e.id = employee_id), modules`
+	(SELECT jira_login FROM employees e WHERE e.id = employee_id), modules,
+	EXISTS (SELECT 1 FROM lead_projects lp WHERE lp.user_id = users.id)`
 
 func scanUser(r pgx.Row) (User, error) {
 	var u User
-	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules)
+	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &u.HasProjects)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -175,7 +177,7 @@ func (s *Store) Authenticate(ctx context.Context, login, password string) (User,
 	var hash string
 	var u User
 	err := s.pool.QueryRow(ctx, `SELECT `+userCols+`, password_hash FROM users WHERE lower(login) = lower($1) AND active`,
-		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &hash)
+		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &u.HasProjects, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return User{}, ErrBadCredentials
@@ -374,7 +376,8 @@ func (s *Store) UserBySession(ctx context.Context, token string) (User, error) {
 	u, err := scanUser(s.pool.QueryRow(ctx, `UPDATE sessions s SET last_seen_at = now()
 		FROM users u WHERE s.token_hash = $1 AND s.expires_at > now() AND u.id = s.user_id AND u.active
 		RETURNING u.id, u.login, u.full_name, u.role, u.employee_id, u.active, u.created_at, u.last_login_at,
-		  (SELECT jira_login FROM employees e WHERE e.id = u.employee_id), u.modules`, tokenHash(token)))
+		  (SELECT jira_login FROM employees e WHERE e.id = u.employee_id), u.modules,
+		  EXISTS (SELECT 1 FROM lead_projects lp WHERE lp.user_id = u.id)`, tokenHash(token)))
 	return u, err
 }
 

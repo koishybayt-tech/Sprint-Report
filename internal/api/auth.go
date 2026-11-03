@@ -122,6 +122,19 @@ func requireRole(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
+// requireLeadAccess — «Контроль спринта»: admin и lead, а также любой пользователь, которому админ назначил проекты
+// («Настройки → Руководители и проекты»), например ПМ проекта.
+func requireLeadAccess(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, _ := auth.FromContext(r.Context())
+		if u.Role == auth.RoleAdmin || u.Role == auth.RoleLead || u.HasProjects {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "недостаточно прав"})
+	})
+}
+
 // requireModule — доступ к модулю шапки: админу всегда, остальным — если модуль выдан пользователю.
 // Работает вместе с requireRole: роль ограничивает, модуль выдаёт.
 func requireModule(mod string) func(http.Handler) http.Handler {

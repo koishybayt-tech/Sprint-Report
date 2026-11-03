@@ -22,7 +22,7 @@ func iss(key, summary, status string, created float64, ch ...Change) *Issue {
 }
 
 func input(issues ...*Issue) *Input {
-	in := &Input{Now: now, Lead: "Лид", Projects: []LeadProject{{"AC", "Комплаенс"}, {"EDO", "ЭДО"}},
+	in := &Input{Now: now, Lead: "Лид", Projects: []LeadProject{{Key: "AC", Title: "Комплаенс"}, {Key: "EDO", Title: "ЭДО"}},
 		LeadOf: map[string]string{"AC": "Лид", "EDO": "Лид", "ADTC": "Другой"},
 		Issues: map[string]*Issue{}, Names: map[string]string{"ivanov": "Иванов", "petrov": "Петров", "qa": "Тестов"},
 		Roles: map[string]string{"Иванов": "Backend Developer", "Петров": "Frontend Developer", "Тестов": "QA Engineer"}}

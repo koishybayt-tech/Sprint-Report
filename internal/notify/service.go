@@ -126,12 +126,14 @@ func (r recipient) wants(kind string) bool {
 	return true
 }
 
-// recipients — активные пользователи (admin, lead), связанные с сотрудником-руководителем; без настроек — все события.
+// recipients — активные пользователи: admin/lead, связанные с сотрудником-руководителем, и те, кому назначены его проекты
+// (lead_projects.user_id); без настроек — все события.
 func (s *Service) recipients(ctx context.Context, lead string) ([]recipient, error) {
 	rows, err := s.pool.Query(ctx, `SELECT u.id, coalesce(n.on_blocked, true), coalesce(n.on_unblock, true), coalesce(n.on_gap, true),
 			n.tg_token_enc, n.tg_chat_id
-		FROM users u JOIN employees e ON e.id = u.employee_id LEFT JOIN notify_settings n ON n.user_id = u.id
-		WHERE e.full_name = $1 AND u.active AND u.role IN ('admin', 'lead')`, lead)
+		FROM users u LEFT JOIN employees e ON e.id = u.employee_id LEFT JOIN notify_settings n ON n.user_id = u.id
+		WHERE u.active AND ((e.full_name = $1 AND u.role IN ('admin', 'lead'))
+			OR u.id IN (SELECT user_id FROM lead_projects WHERE lead = $1 AND user_id IS NOT NULL))`, lead)
 	if err != nil {
 		return nil, err
 	}

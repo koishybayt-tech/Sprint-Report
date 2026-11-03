@@ -49,8 +49,9 @@ type Issue struct {
 
 // LeadProject — проект руководителя (lead_projects).
 type LeadProject struct {
-	Key   string `json:"key"`
-	Title string `json:"title"`
+	Key      string `json:"key"`
+	Title    string `json:"title"`
+	Assigned bool   `json:"-"` // проект назначен пользователю сервиса (lead_projects.user_id)
 }
 
 // Input — всё для расчёта по одному руководителю.

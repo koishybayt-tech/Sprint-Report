@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,7 +27,7 @@ func LeadControlLeads(ctx context.Context, pool *pgxpool.Pool) ([]string, map[st
 		if title == "" {
 			title = r.ProjectKey
 		}
-		by[r.Lead] = append(by[r.Lead], leadcontrol.LeadProject{Key: r.ProjectKey, Title: title})
+		by[r.Lead] = append(by[r.Lead], leadcontrol.LeadProject{Key: r.ProjectKey, Title: title, Assigned: r.UserID != nil})
 	}
 	return leads, by, nil
 }
@@ -183,9 +184,21 @@ func loadLeadControlData(ctx context.Context, pool *pgxpool.Pool, leads map[stri
 		}
 	}
 	prows.Close()
-	for lead, ps := range leads {
-		for _, p := range ps {
-			d.leadOf[p.Key] = lead
+	// Проект может быть ещё и назначен пользователю (ПМу): руководителем в подписях остаётся тот, кто записан по Jira.
+	names := make([]string, 0, len(leads))
+	for l := range leads {
+		names = append(names, l)
+	}
+	sort.Strings(names)
+	claimed := map[string]bool{}
+	for _, assigned := range []bool{false, true} {
+		for _, lead := range names {
+			for _, p := range leads[lead] {
+				if p.Assigned != assigned || (assigned && claimed[p.Key]) {
+					continue
+				}
+				d.leadOf[p.Key], claimed[p.Key] = lead, true
+			}
 		}
 	}
 
