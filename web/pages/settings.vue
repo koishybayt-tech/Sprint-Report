@@ -156,15 +156,23 @@ async function copyIssued() {
   try { await navigator.clipboard.writeText(issued.value.password); copied.value = true } catch { copied.value = false }
 }
 
-const form = reactive({ login: '', full_name: '', role: 'employee', employee_login: '', err: '', busy: false })
+const allModules = () => MODULES.map(m => m.key as string)
+const form = reactive({ login: '', full_name: '', role: 'employee', employee_login: '', modules: allModules(), err: '', busy: false })
+
+// Галочка модуля у существующего пользователя сохраняется сразу; админу доступны все модули всегда.
+function toggleModule(u: User, key: string, on: boolean) {
+  const cur = new Set(u.modules)
+  if (on) cur.add(key); else cur.delete(key)
+  return patchUser(u, { modules: MODULES.map(m => m.key as string).filter(k => cur.has(k)) })
+}
 async function createUser() {
   form.err = ''; form.busy = true
   try {
     const r = await $fetch<{ user: User; password?: string }>(`${apiBase}/admin/users`, {
-      method: 'POST', body: { login: form.login, full_name: form.full_name, role: form.role, employee_login: form.employee_login },
+      method: 'POST', body: { login: form.login, full_name: form.full_name, role: form.role, employee_login: form.employee_login, modules: form.modules },
     })
     issued.value = r.password ? { login: r.user.login, password: r.password } : null; copied.value = false
-    form.login = form.full_name = form.employee_login = ''; form.role = 'employee'
+    form.login = form.full_name = form.employee_login = ''; form.role = 'employee'; form.modules = allModules()
     await loadUsers()
   } catch (e) { form.err = errText(e) } finally { form.busy = false }
 }
@@ -185,7 +193,7 @@ async function saveEdit(u: User) {
   if (ok) editing.value = null
 }
 
-async function patchUser(u: User, body: Partial<Pick<User, 'role' | 'active' | 'full_name' | 'login'>> & { employee_login?: string }): Promise<boolean> {
+async function patchUser(u: User, body: Partial<Pick<User, 'role' | 'active' | 'full_name' | 'login' | 'modules'>> & { employee_login?: string }): Promise<boolean> {
   rowErr.value = { ...rowErr.value, [u.id]: '' }
   try {
     const nu = await $fetch<User>(`${apiBase}/admin/users/${u.id}`, { method: 'PATCH', body })
@@ -299,7 +307,7 @@ async function resetPassword(u: User) {
     <template v-if="isAdmin">
       <section class="card">
         <h2>Пользователи</h2>
-        <p class="lead">Кто может входить в сервис и что видит. «Спринты» доступны всем ролям, кроме HR; пользователями управляет только администратор.</p>
+        <p class="lead">Кто может входить в сервис и какие модули шапки видит. Модуль нужно выдать галочкой, и при этом роль должна его допускать (например, «Спринты» недоступны HR). Администратору доступны все модули. Пользователями управляет только администратор.</p>
 
         <div v-if="issued" class="issued" role="status">
           <div>Пароль для <b>{{ issued.login }}</b> — передайте его человеку лично. Больше он показан не будет.</div>
@@ -317,6 +325,11 @@ async function resetPassword(u: User) {
             </select>
           </label>
           <label>Логин в Jira <span class="sub">(необязательно)</span><input v-model="form.employee_login" autocomplete="off" placeholder="для связи с карточкой"></label>
+          <fieldset class="mods">
+            <legend>Модули в шапке</legend>
+            <label v-for="m in MODULES" :key="m.key" class="chk"><input v-model="form.modules" type="checkbox" :value="m.key"> {{ m.title }}</label>
+            <span v-if="form.role === 'admin'" class="sub">администратору доступны все</span>
+          </fieldset>
           <div class="form-actions">
             <button class="btn primary" type="submit" :disabled="form.busy">Создать — пароль сгенерируется</button>
             <span v-if="form.err" class="form-error">{{ form.err }}</span>
@@ -326,7 +339,7 @@ async function resetPassword(u: User) {
         <p v-if="listErr" class="form-error">{{ listErr }}</p>
         <div class="tbl">
           <table>
-            <thead><tr><th>Пользователь</th><th>Логин</th><th>Логин в Jira</th><th>Роль</th><th>Активен</th><th>Последний вход</th><th /></tr></thead>
+            <thead><tr><th>Пользователь</th><th>Логин</th><th>Логин в Jira</th><th>Роль</th><th>Модули</th><th>Активен</th><th>Последний вход</th><th /></tr></thead>
             <tbody>
               <tr v-for="u in users" :key="u.id" :class="{ inactive: !u.active }">
                 <template v-if="editing === u.id">
@@ -346,6 +359,12 @@ async function resetPassword(u: User) {
                     <option v-for="(t, r) in ROLE_TITLES" :key="r" :value="r">{{ t }}</option>
                   </select>
                 </td>
+                <td class="mods">
+                  <label v-for="m in MODULES" :key="m.key" class="chk">
+                    <input type="checkbox" :checked="u.modules.includes(m.key)" :disabled="u.role === 'admin'" :aria-label="`${m.title}: ${u.full_name}`"
+                      @change="toggleModule(u, m.key, ($event.target as HTMLInputElement).checked)"> {{ m.title }}
+                  </label>
+                </td>
                 <td><label class="chk"><input type="checkbox" :checked="u.active" @change="patchUser(u, { active: ($event.target as HTMLInputElement).checked })"> {{ u.active ? 'да' : 'заблокирован' }}</label></td>
                 <td class="sub">{{ dt(u.last_login_at) }}</td>
                 <td class="actions">
@@ -359,7 +378,7 @@ async function resetPassword(u: User) {
                   </template>
                 </td>
               </tr>
-              <tr v-if="!users.length"><td colspan="7" class="sub empty">Пользователей пока нет</td></tr>
+              <tr v-if="!users.length"><td colspan="8" class="sub empty">Пользователей пока нет</td></tr>
             </tbody>
           </table>
         </div>

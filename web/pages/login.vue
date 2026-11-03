@@ -17,7 +17,7 @@ async function submit() {
     await $fetch(`${apiBase}/auth/login`, { method: 'POST', body: { login: login.value, password: password.value } })
     const me = await load()
     const next = typeof route.query.next === 'string' && route.query.next.startsWith('/') ? route.query.next : null
-    await navigateTo(next || (me && canSeeSprints(me) ? '/sprints' : '/attendance'))
+    await navigateTo(next || firstPage(me))
   } catch (e: any) {
     error.value = e?.data?.error || (e?.statusCode ? `Ошибка ${e.statusCode}` : 'Сервис недоступен')
     password.value = ''

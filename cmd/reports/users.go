@@ -42,7 +42,7 @@ func runUsers(ctx context.Context, log *slog.Logger, args []string) error {
 	if password == "" {
 		password, generated = auth.GeneratePassword(), true
 	}
-	u, err := auth.NewStore(pool).Create(ctx, *login, *name, *role, password, *emp)
+	u, err := auth.NewStore(pool).Create(ctx, *login, *name, *role, password, *emp, nil)
 	if err != nil {
 		return err
 	}

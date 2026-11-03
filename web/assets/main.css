@@ -92,6 +92,10 @@ footer{margin-top:28px;color:var(--muted);font-size:12px}
 .grp{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;padding-block:2px}
 .chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
 .tools .chk input{flex:none;max-width:none}
+.mods{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;border:0;padding:0;margin:0;grid-column:1/-1}
+.mods legend{font-size:13px;color:var(--muted);padding:0;margin-bottom:4px}
+td.mods{display:table-cell;min-width:14em}
+td.mods .chk{margin-right:10px}
 .tools .gf input{flex:none}
 .gf input{font:13px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;max-width:260px}
 .gf input[type=number]{width:72px;font-family:var(--f-mono)}

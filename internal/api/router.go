@@ -37,17 +37,17 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 			r.Get("/me", ah.me)
 			r.Post("/me/password", ah.changeOwnPassword)
 
-			r.Get("/attendance", attendance(pool, log)) // видимость — по роли внутри
+			r.With(requireModule(auth.ModAttendance)).Get("/attendance", attendance(pool, log)) // видимость — по роли внутри
 			// Колокольчик — свои уведомления у любого пользователя.
 			r.Get("/notifications", notifyList(nt, log))
 			r.Post("/notifications/read", notifyRead(nt, log))
 			empCache := &employeesCache{}
-			r.Get("/employees", employeesList(pool, log, empCache))
-			r.Get("/employees/{id}", employeeCard(pool, log, empCache))
+			r.With(requireModule(auth.ModEmployees)).Get("/employees", employeesList(pool, log, empCache))
+			r.With(requireModule(auth.ModEmployees)).Get("/employees/{id}", employeeCard(pool, log, empCache))
 
 			// Спринты: все, кроме hr.
 			r.Group(func(r chi.Router) {
-				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee))
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee), requireModule(auth.ModSprints))
 				r.Get("/sprints", sprints(pool, log))
 				r.Get("/sprints/next", nextSprints(pool, log))
 				r.Get("/sprints/report", sprintReport(pool, log))
@@ -55,7 +55,7 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 
 			// Контроль спринта руководителей: admin и lead; хендлеры — по сгенерированному lcapi (api/openapi.yaml).
 			r.Group(func(r chi.Router) {
-				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead))
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead), requireModule(auth.ModLeadControl))
 				lcapi.HandlerFromMux(&leadControlServer{pool: pool, log: log, jiraBase: cfg.JiraBaseURL, notify: nt}, r)
 
 				// Уведомления руководителя: какие события присылать и личный Telegram-бот.
@@ -69,7 +69,7 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 			// Снепшоты — замороженные копии отчёта «Спринты»: смотрят все, кому видны «Спринты» (не hr);
 			// сохраняют и удаляют admin и lead.
 			r.Route("/snapshots", func(r chi.Router) {
-				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee))
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleLead, auth.RoleEmployee), requireModule(auth.ModSprints))
 				r.Get("/", snapshotsList(pool, log))
 				r.Get("/{date}", snapshotGet(pool, log))
 				r.Group(func(r chi.Router) {
@@ -81,7 +81,7 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 
 			// Очередь «Кто это?» (Telegram → сотрудник): admin и hr.
 			r.Route("/admin/tg", func(r chi.Router) {
-				r.Use(requireRole(auth.RoleAdmin, auth.RoleHR))
+				r.Use(requireRole(auth.RoleAdmin, auth.RoleHR), requireModule(auth.ModAttendance))
 				r.Get("/unknown", tgUnknown(pool, log))
 				r.Post("/aliases", tgMapAuthor(pool, log))
 			})

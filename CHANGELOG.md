@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-03 — доступ к модулям шапки
+- Миграция `00011_user_modules.sql`: `users.modules text[]` (sprints, lead_control, attendance, employees); существующим пользователям выданы все модули.
+- API: `requireModule` рядом с `requireRole` закрывает эндпоинты модулей (`/sprints*`, `/snapshots*`, `/notifications/settings|telegram|test` и контроль спринта, `/attendance`, `/admin/tg/*`, `/employees*`); у admin доступ ко всем модулям всегда. `POST/PATCH /admin/users` принимают `modules` (при создании без поля — все модули).
+- web: «Настройки → Пользователи» — галочки модулей при создании и в таблице; шапка и маршруты показывают только выданные модули, при отсутствии доступа — переход на первую доступную страницу (`firstPage`).
+
 ## 2026-11-02 — каркас для запуска
 - `cmd/reports`: подкоманды `serve` (chi, `GET /api/v1/healthz` с проверкой БД), `worker` (заглушка, лог раз в минуту), `migrate` (goose, миграции встроены в бинарь), `seed --dir`, `healthcheck`.
 - `internal/db/migrations/00001_init.sql` — схема из `docs/schema.sql`.

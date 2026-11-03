@@ -52,3 +52,30 @@ func TestValidRole(t *testing.T) {
 		t.Error("ValidRole")
 	}
 }
+
+func TestNormalizeModules(t *testing.T) {
+	all, err := NormalizeModules(nil)
+	if err != nil || len(all) != len(Modules) {
+		t.Fatalf("nil → все модули: %v %v", all, err)
+	}
+	got, err := NormalizeModules([]string{ModEmployees, ModSprints, ModSprints})
+	if err != nil || len(got) != 2 || got[0] != ModSprints || got[1] != ModEmployees {
+		t.Fatalf("порядок и дубли: %v %v", got, err)
+	}
+	if none, err := NormalizeModules([]string{}); err != nil || len(none) != 0 {
+		t.Fatalf("пустой список допустим: %v %v", none, err)
+	}
+	if _, err := NormalizeModules([]string{"nope"}); err == nil {
+		t.Fatal("неизвестный модуль должен давать ошибку")
+	}
+}
+
+func TestHasModule(t *testing.T) {
+	if !(User{Role: RoleAdmin}).HasModule(ModAttendance) {
+		t.Fatal("админ видит все модули")
+	}
+	u := User{Role: RoleLead, Modules: []string{ModSprints}}
+	if !u.HasModule(ModSprints) || u.HasModule(ModLeadControl) {
+		t.Fatal("доступ только к выданным модулям")
+	}
+}

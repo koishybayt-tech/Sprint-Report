@@ -44,6 +44,59 @@ func ValidRole(r string) bool {
 	return false
 }
 
+// Модули шапки (users.modules). Админ видит все всегда; остальным модуль нужен и по роли (docs/security.md), и в списке.
+const (
+	ModSprints     = "sprints"
+	ModLeadControl = "lead_control"
+	ModAttendance  = "attendance"
+	ModEmployees   = "employees"
+)
+
+var Modules = []string{ModSprints, ModLeadControl, ModAttendance, ModEmployees}
+
+func validModule(m string) bool {
+	for _, x := range Modules {
+		if x == m {
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizeModules проверяет список модулей, убирает повторы и приводит к порядку Modules. nil → все модули.
+func NormalizeModules(in []string) ([]string, error) {
+	if in == nil {
+		return append([]string{}, Modules...), nil
+	}
+	seen := map[string]bool{}
+	for _, m := range in {
+		if !validModule(m) {
+			return nil, fmt.Errorf("неизвестный модуль %q", m)
+		}
+		seen[m] = true
+	}
+	out := []string{}
+	for _, m := range Modules {
+		if seen[m] {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// HasModule: админ — всегда да; остальные — по списку modules.
+func (u User) HasModule(m string) bool {
+	if u.Role == RoleAdmin {
+		return true
+	}
+	for _, x := range u.Modules {
+		if x == m {
+			return true
+		}
+	}
+	return false
+}
+
 type User struct {
 	ID            int64      `json:"id"`
 	Login         string     `json:"login"`
@@ -51,6 +104,7 @@ type User struct {
 	Role          string     `json:"role"`
 	EmployeeID    *int64     `json:"employee_id"`
 	EmployeeLogin *string    `json:"employee_login"` // логин Jira связанного сотрудника
+	Modules       []string   `json:"modules"`        // у админа всегда все
 	Active        bool       `json:"active"`
 	CreatedAt     time.Time  `json:"created_at"`
 	LastLoginAt   *time.Time `json:"last_login_at"`
@@ -95,15 +149,25 @@ var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password-for-timing
 // ---------- пользователи ----------
 
 const userCols = `id, login, full_name, role, employee_id, active, created_at, last_login_at,
-	(SELECT jira_login FROM employees e WHERE e.id = employee_id)`
+	(SELECT jira_login FROM employees e WHERE e.id = employee_id), modules`
 
 func scanUser(r pgx.Row) (User, error) {
 	var u User
-	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin)
+	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
+	u.fixModules()
 	return u, err
+}
+
+// fixModules: у админа в ответе все модули, у остальных — список из базы (не nil).
+func (u *User) fixModules() {
+	if u.Role == RoleAdmin {
+		u.Modules = append([]string{}, Modules...)
+	} else if u.Modules == nil {
+		u.Modules = []string{}
+	}
 }
 
 // Authenticate проверяет логин и пароль активного пользователя.
@@ -111,7 +175,7 @@ func (s *Store) Authenticate(ctx context.Context, login, password string) (User,
 	var hash string
 	var u User
 	err := s.pool.QueryRow(ctx, `SELECT `+userCols+`, password_hash FROM users WHERE lower(login) = lower($1) AND active`,
-		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &hash)
+		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return User{}, ErrBadCredentials
@@ -122,6 +186,7 @@ func (s *Store) Authenticate(ctx context.Context, login, password string) (User,
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		return User{}, ErrBadCredentials
 	}
+	u.fixModules()
 	_, err = s.pool.Exec(ctx, `UPDATE users SET last_login_at = now() WHERE id = $1`, u.ID)
 	return u, err
 }
@@ -148,7 +213,8 @@ func (s *Store) Get(ctx context.Context, id int64) (User, error) {
 }
 
 // Create добавляет пользователя. employeeLogin — логин сотрудника в Jira для связи с карточкой (необязателен).
-func (s *Store) Create(ctx context.Context, login, fullName, role, password, employeeLogin string) (User, error) {
+// modules — доступные модули шапки; nil — все.
+func (s *Store) Create(ctx context.Context, login, fullName, role, password, employeeLogin string, modules []string) (User, error) {
 	login, fullName = strings.TrimSpace(login), strings.TrimSpace(fullName)
 	if login == "" || fullName == "" {
 		return User{}, errors.New("укажите логин и имя")
@@ -156,13 +222,17 @@ func (s *Store) Create(ctx context.Context, login, fullName, role, password, emp
 	if !ValidRole(role) {
 		return User{}, fmt.Errorf("неизвестная роль %q", role)
 	}
+	mods, err := NormalizeModules(modules)
+	if err != nil {
+		return User{}, err
+	}
 	hash, err := HashPassword(password)
 	if err != nil {
 		return User{}, err
 	}
-	u, err := scanUser(s.pool.QueryRow(ctx, `INSERT INTO users (login, full_name, role, password_hash, employee_id)
-		VALUES ($1, $2, $3, $4, (SELECT id FROM employees WHERE jira_login = nullif($5, '')))
-		RETURNING `+userCols, login, fullName, role, hash, strings.TrimSpace(employeeLogin)))
+	u, err := scanUser(s.pool.QueryRow(ctx, `INSERT INTO users (login, full_name, role, password_hash, employee_id, modules)
+		VALUES ($1, $2, $3, $4, (SELECT id FROM employees WHERE jira_login = nullif($5, '')), $6)
+		RETURNING `+userCols, login, fullName, role, hash, strings.TrimSpace(employeeLogin), mods))
 	if err != nil && strings.Contains(err.Error(), "users_login_key") {
 		return User{}, ErrLoginTaken
 	}
@@ -176,6 +246,7 @@ type UserPatch struct {
 	Role          *string
 	Active        *bool
 	EmployeeLogin *string
+	Modules       *[]string // nil — не трогать
 }
 
 var ErrNoEmployee = errors.New("сотрудника с таким логином Jira нет в справочнике")
@@ -194,6 +265,13 @@ func (s *Store) Update(ctx context.Context, id int64, p UserPatch) (User, error)
 	if p.FullName != nil && strings.TrimSpace(*p.FullName) == "" {
 		return User{}, errors.New("укажите имя")
 	}
+	var mods []string // nil → не менять (coalesce)
+	if p.Modules != nil {
+		var err error
+		if mods, err = NormalizeModules(*p.Modules); err != nil {
+			return User{}, err
+		}
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, err
@@ -211,8 +289,8 @@ func (s *Store) Update(ctx context.Context, id int64, p UserPatch) (User, error)
 	u, err := scanUser(tx.QueryRow(ctx, `UPDATE users SET login = coalesce(nullif(trim($2), ''), login),
 		full_name = coalesce(nullif(trim($3), ''), full_name), role = coalesce($4, role), active = coalesce($5, active),
 		employee_id = CASE WHEN $6::text IS NULL THEN employee_id ELSE (SELECT id FROM employees WHERE jira_login = nullif(trim($6), '')) END,
-		updated_at = now() WHERE id = $1 RETURNING `+userCols,
-		id, p.Login, p.FullName, p.Role, p.Active, p.EmployeeLogin))
+		modules = coalesce($7::text[], modules), updated_at = now() WHERE id = $1 RETURNING `+userCols,
+		id, p.Login, p.FullName, p.Role, p.Active, p.EmployeeLogin, mods))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -296,7 +374,7 @@ func (s *Store) UserBySession(ctx context.Context, token string) (User, error) {
 	u, err := scanUser(s.pool.QueryRow(ctx, `UPDATE sessions s SET last_seen_at = now()
 		FROM users u WHERE s.token_hash = $1 AND s.expires_at > now() AND u.id = s.user_id AND u.active
 		RETURNING u.id, u.login, u.full_name, u.role, u.employee_id, u.active, u.created_at, u.last_login_at,
-		  (SELECT jira_login FROM employees e WHERE e.id = u.employee_id)`, tokenHash(token)))
+		  (SELECT jira_login FROM employees e WHERE e.id = u.employee_id), u.modules`, tokenHash(token)))
 	return u, err
 }
 

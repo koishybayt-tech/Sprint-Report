@@ -122,6 +122,20 @@ func requireRole(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
+// requireModule — доступ к модулю шапки: админу всегда, остальным — если модуль выдан пользователю.
+// Работает вместе с requireRole: роль ограничивает, модуль выдаёт.
+func requireModule(mod string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if u, _ := auth.FromContext(r.Context()); !u.HasModule(mod) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "нет доступа к модулю"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // GET /api/v1/me
 func (h *authHandlers) me(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.FromContext(r.Context())
@@ -166,11 +180,12 @@ func (h *authHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 // Без password генерируется случайный; он возвращается один раз в ответе.
 func (h *authHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Login         string `json:"login"`
-		FullName      string `json:"full_name"`
-		Role          string `json:"role"`
-		Password      string `json:"password"`
-		EmployeeLogin string `json:"employee_login"`
+		Login         string   `json:"login"`
+		FullName      string   `json:"full_name"`
+		Role          string   `json:"role"`
+		Password      string   `json:"password"`
+		EmployeeLogin string   `json:"employee_login"`
+		Modules       []string `json:"modules"` // не указано — все модули
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -179,7 +194,7 @@ func (h *authHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 	if generated {
 		req.Password = auth.GeneratePassword()
 	}
-	u, err := h.users.Create(r.Context(), req.Login, req.FullName, req.Role, req.Password, req.EmployeeLogin)
+	u, err := h.users.Create(r.Context(), req.Login, req.FullName, req.Role, req.Password, req.EmployeeLogin, req.Modules)
 	if err != nil {
 		h.userErr(w, "admin/users create", err)
 		return
@@ -201,22 +216,23 @@ func (h *authHandlers) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Login         *string `json:"login"`
-		FullName      *string `json:"full_name"`
-		Role          *string `json:"role"`
-		Active        *bool   `json:"active"`
-		EmployeeLogin *string `json:"employee_login"` // "" — отвязать от сотрудника
+		Login         *string   `json:"login"`
+		FullName      *string   `json:"full_name"`
+		Role          *string   `json:"role"`
+		Active        *bool     `json:"active"`
+		EmployeeLogin *string   `json:"employee_login"` // "" — отвязать от сотрудника
+		Modules       *[]string `json:"modules"`
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	u, err := h.users.Update(r.Context(), id, auth.UserPatch{Login: req.Login, FullName: req.FullName, Role: req.Role, Active: req.Active, EmployeeLogin: req.EmployeeLogin})
+	u, err := h.users.Update(r.Context(), id, auth.UserPatch{Login: req.Login, FullName: req.FullName, Role: req.Role, Active: req.Active, EmployeeLogin: req.EmployeeLogin, Modules: req.Modules})
 	if err != nil {
 		h.userErr(w, "admin/users update", err)
 		return
 	}
 	actor, _ := auth.FromContext(r.Context())
-	h.log.Info("auth: пользователь изменён", "login", u.Login, "role", u.Role, "active", u.Active, "employee", u.EmployeeLogin, "by", actor.Login)
+	h.log.Info("auth: пользователь изменён", "login", u.Login, "role", u.Role, "active", u.Active, "employee", u.EmployeeLogin, "modules", u.Modules, "by", actor.Login)
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -257,7 +273,7 @@ func (h *authHandlers) userErr(w http.ResponseWriter, what string, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 	case errors.Is(err, auth.ErrLoginTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-	case errors.Is(err, auth.ErrWeakPassword), errors.Is(err, auth.ErrNoEmployee), strings.HasPrefix(err.Error(), "укажите"), strings.HasPrefix(err.Error(), "неизвестная роль"),
+	case errors.Is(err, auth.ErrWeakPassword), errors.Is(err, auth.ErrNoEmployee), strings.HasPrefix(err.Error(), "укажите"), strings.HasPrefix(err.Error(), "неизвестная роль"), strings.HasPrefix(err.Error(), "неизвестный модуль"),
 		strings.HasPrefix(err.Error(), "должен остаться"):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	default:
