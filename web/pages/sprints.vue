@@ -127,7 +127,8 @@ const onClickDoc = (e: MouseEvent) => {
   if (el) { tipEl === el && tip.show ? tipHide() : tipShow(el) } else tipHide()
 }
 const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') tipHide() }
-const onScroll = (e: Event) => { if (!ttRef.value?.contains(e.target as Node)) tipHide() }
+// Цель прокрутки страницы — document; не-узлы (window) не проверяем, иначе contains() бросает.
+const onScroll = (e: Event) => { const t = e.target; if (!(t instanceof Node) || !ttRef.value?.contains(t)) tipHide() }
 onMounted(() => {
   document.addEventListener('mouseover', onOver); document.addEventListener('mouseout', onOut)
   document.addEventListener('click', onClickDoc); document.addEventListener('keydown', onKey); addEventListener('scroll', onScroll, true)

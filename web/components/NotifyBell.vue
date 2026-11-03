@@ -10,7 +10,10 @@ const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 async function load() {
-  try { data.value = await $fetch(`${apiBase}/notifications`) } catch { /* сеть или выход — попробуем позже */ }
+  try { data.value = await $fetch(`${apiBase}/notifications`) } catch (e: any) {
+    // Сессия кончилась (выход, блокировка) — перестаём опрашивать до следующего входа; сеть — попробуем позже.
+    if (e?.statusCode === 401) clearInterval(timer)
+  }
 }
 async function readAll() {
   await $fetch(`${apiBase}/notifications/read`, { method: 'POST', body: { all: true } }).catch(() => {})
@@ -23,7 +26,7 @@ async function readOne(n: N) {
   data.value.unread = Math.max(0, data.value.unread - 1)
 }
 let timer: ReturnType<typeof setInterval> | undefined
-function outside(e: MouseEvent) { if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false }
+function outside(e: MouseEvent) { if (open.value && root.value && e.target instanceof Node && !root.value.contains(e.target)) open.value = false }
 // notify:refresh — обновить сразу (например, после «Проверить уведомление» в настройках).
 onMounted(() => { load(); timer = setInterval(load, 60_000); document.addEventListener('click', outside); window.addEventListener('notify:refresh', load) })
 onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('click', outside); window.removeEventListener('notify:refresh', load) })
