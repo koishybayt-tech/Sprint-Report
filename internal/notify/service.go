@@ -184,7 +184,7 @@ func (s *Service) deliver(ctx context.Context, lead string, events []Event) erro
 				}
 				btn = append(btn, Button{Text: "Игнорировать", Data: "ign:" + strconv.FormatInt(id, 10)})
 			}
-			if err := tg.Send(ctx, *r.chatID, e.Text, btn...); err != nil {
+			if err := tg.SendLinked(ctx, *r.chatID, e.Text, s.jiraBase, btn...); err != nil {
 				s.log.Warn("notify: отправка в бота", "user", r.userID, "err", err)
 			}
 		}
@@ -383,7 +383,7 @@ func (s *Service) Test(ctx context.Context, userID int64, kind string) (TestResu
 	case KindGap:
 		btn = []Button{{Text: "Создать продолжение", URL: s.jiraBase + "/secure/CreateIssueDetails!init.jspa"}, {Text: "Игнорировать", Data: "test"}}
 	}
-	if err := tg.Send(ctx, chat, "🧪 Тест\n"+text, btn...); err != nil {
+	if err := tg.SendLinked(ctx, chat, "🧪 Тест\n"+text, s.jiraBase, btn...); err != nil {
 		res.Telegram, res.Error = "error", err.Error()
 		return res, nil
 	}
@@ -522,7 +522,7 @@ func (s *Service) handleCallback(ctx context.Context, tg *TG, b botRow, u Update
 	}
 	_, _ = s.pool.Exec(ctx, `UPDATE notifications SET read_at = coalesce(read_at, now()) WHERE id = $1`, id)
 	_ = tg.Answer(ctx, cb.ID, key+" скрыта из разрывов")
-	_ = tg.Send(ctx, *b.chat, fmt.Sprintf("🙈 %s скрыта из «Дизайн или бэк готов, а продолжения нет» и больше не будет присылаться. Вернуть — на странице «Контроль спринта».", key))
+	_ = tg.SendLinked(ctx, *b.chat, fmt.Sprintf("🙈 %s скрыта из «Дизайн или бэк готов, а продолжения нет» и больше не будет присылаться. Вернуть — на странице «Контроль спринта».", key), s.jiraBase)
 	if s.Rebuild != nil {
 		if err := s.Rebuild(ctx, lead); err != nil {
 			s.log.Warn("notify: пересчёт после «Игнорировать»", "lead", lead, "err", err)

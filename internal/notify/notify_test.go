@@ -51,3 +51,22 @@ func TestBox(t *testing.T) {
 		t.Error("чужой ключ не должен расшифровывать")
 	}
 }
+
+func TestLinkKeys(t *testing.T) {
+	const jira = "https://jira.adata.kz/"
+	cases := []struct{ in, want string }{
+		{"🔒 AC-12 попала в блок · Иван · Бэк",
+			`🔒 <a href="https://jira.adata.kz/browse/AC-12">AC-12</a> попала в блок · Иван · Бэк`},
+		// несколько ключей, в том числе в названии задачи; проекты с цифрами и подчёркиванием
+		{"EDO-5 ждёт A1B-7 и FSM_SEC-10", `<a href="https://jira.adata.kz/browse/EDO-5">EDO-5</a> ждёт <a href="https://jira.adata.kz/browse/A1B-7">A1B-7</a> и <a href="https://jira.adata.kz/browse/FSM_SEC-10">FSM_SEC-10</a>`},
+		// разметка в названии задачи не должна ломать сообщение
+		{"AC-1 <b>& «тест»</b>", `<a href="https://jira.adata.kz/browse/AC-1">AC-1</a> &lt;b&gt;&amp; «тест»&lt;/b&gt;`},
+		{"без ключей", "без ключей"},
+		{"ac-1 и AC- и -5", "ac-1 и AC- и -5"},
+	}
+	for _, c := range cases {
+		if got := LinkKeys(c.in, jira); got != c.want {
+			t.Errorf("LinkKeys(%q)\n got  %s\n want %s", c.in, got, c.want)
+		}
+	}
+}

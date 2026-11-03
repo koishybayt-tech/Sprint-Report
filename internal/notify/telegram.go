@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -76,8 +78,31 @@ type Button struct {
 	Data string
 }
 
+// Send — обычный текст без разметки.
 func (t *TG) Send(ctx context.Context, chatID int64, text string, buttons ...Button) error {
+	return t.send(ctx, chatID, text, false, buttons)
+}
+
+// SendLinked — то же, но номера задач Jira (AC-123) в тексте становятся ссылками на jiraBase/browse/KEY.
+func (t *TG) SendLinked(ctx context.Context, chatID int64, text, jiraBase string, buttons ...Button) error {
+	return t.send(ctx, chatID, LinkKeys(text, jiraBase), true, buttons)
+}
+
+var reIssueKey = regexp.MustCompile(`\b[A-Z][A-Z0-9_]*-\d+\b`)
+
+// LinkKeys экранирует текст для Telegram (parse_mode HTML) и оборачивает ключи задач в ссылки на Jira.
+func LinkKeys(text, jiraBase string) string {
+	base := strings.TrimRight(jiraBase, "/")
+	return reIssueKey.ReplaceAllStringFunc(html.EscapeString(text), func(key string) string {
+		return `<a href="` + html.EscapeString(base+"/browse/"+key) + `">` + key + `</a>`
+	})
+}
+
+func (t *TG) send(ctx context.Context, chatID int64, text string, asHTML bool, buttons []Button) error {
 	p := map[string]any{"chat_id": chatID, "text": text, "disable_web_page_preview": true}
+	if asHTML {
+		p["parse_mode"] = "HTML"
+	}
 	if len(buttons) > 0 {
 		row := make([]map[string]string, 0, len(buttons))
 		for _, b := range buttons {
