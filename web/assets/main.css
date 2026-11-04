@@ -283,6 +283,14 @@ tr.inactive td{color:var(--muted)}
 .lc-t tr.hot td.hd{color:var(--bad);font-weight:600}
 .lc-t tr.warm td.hd{color:var(--warn);font-weight:600}
 .lc-t .flag-bad{color:var(--bad);font-weight:600}.lc-t .flag-ok{color:var(--ok);font-weight:600}.lc-t .flag-warn{color:var(--warn);font-weight:600}
+/* «Дизайн или бэк готов…»: ячейки переносятся, колонки делят ширину — на обычном экране без горизонтальной прокрутки */
+.lc-fit .lc-t th{white-space:normal}
+.lc-fit .lc-t td{white-space:normal;overflow-wrap:anywhere}
+.lc-fit .lc-t td.w{min-width:9rem}
+.lc-fit .lc-t td.x{min-width:6.5rem}
+.lc-fit .lc-t td .sub{font-size:11px}
+.lc-fit .lc-t .lc-act{white-space:normal}
+.lc-fit .lc-t .lc-act a{white-space:normal}
 .lc-empty{padding:12px;color:var(--muted);font-size:12px;margin:0}
 .lc-sp{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:8px}
 .lc-sp .row{display:flex;flex-direction:column;gap:4px;font-size:12px}

@@ -30,7 +30,33 @@ export function linkKeys(text: unknown, jiraBase: string): string {
   return out + esc(s.slice(last))
 }
 
+// Фильтры по человеку: «Исполнитель» (на вкладке «Сотрудники» — «Сотрудник») и «Тестировщик» (вкладка «Долго на тесте»).
+export const NONE = '—' // значение фильтра для задач без исполнителя / тестировщика
+export const personOf = (tab: LCTab, r: any): string => String((tab === 'people' ? r.person : r.assignee) ?? '').trim()
+export const testerOf = (r: any): string => String(r.tester ?? '').trim()
+export const matchWho = (value: string, want: string) => !want || (want === NONE ? value === '' : value === want)
+
+export type Opt = { value: string; label: string; n: number }
+// Варианты выпадающего списка со счётчиками: по алфавиту, «не назначен» — последним.
+export function countBy(rows: any[], get: (r: any) => string, noneLabel: string): Opt[] {
+  const m = new Map<string, number>()
+  for (const r of rows) { const v = get(r) || NONE; m.set(v, (m.get(v) ?? 0) + 1) }
+  return [...m.entries()].map(([value, n]) => ({ value, n, label: value === NONE ? noneLabel : value }))
+    .sort((a, b) => (+(a.value === NONE) - +(b.value === NONE)) || a.label.localeCompare(b.label, 'ru'))
+}
+
 // Значение для сортировки: пустые — в конец при любом направлении (как в макете).
+// Строки в порядке таблицы: сортировка по клику на заголовок, пустые значения всегда в конце.
+export function sortRows<T extends Record<string, any>>(rows: T[], [f, d]: [string, number]): T[] {
+  return [...rows].sort((a, b) => {
+    const x = sortVal(a[f], f), y = sortVal(b[f], f)
+    if (x === y) return 0
+    if (x === null) return 1
+    if (y === null) return -1
+    return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'ru')) * d
+  })
+}
+
 export function sortVal(v: unknown, field: string): number | string | null {
   if (v === null || v === undefined || v === '') return null
   if (field === 'priority') return PRI[String(v)] ?? 9

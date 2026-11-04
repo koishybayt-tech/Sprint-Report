@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // «Проекты руководителей · контроль спринта» — по design/prototypes/lead-control.html и docs/lead-control.md.
-// Все фильтры — в query-строке: lead, proj, tab, q, all, pr, miss, kind.
+// Все фильтры — в query-строке: lead, proj, tab, q, all, pr, miss, kind, who (исполнитель), tst (тестировщик).
 import { type LcCol } from '~/components/LcTable.vue'
-import { HOT, type LCTab, TABS, linkKeys } from '~/utils/leadcontrol'
+import { HOT, type LCTab, TABS, countBy, linkKeys, matchWho, personOf, sortRows, testerOf } from '~/utils/leadcontrol'
 import { esc } from '~/utils/sprints'
 
 type Project = { key: string; title: string }
@@ -44,7 +44,7 @@ const TILES: { tab: LCTab; l: string; f: keyof Totals; s: string }[] = [
   { tab: 'test', l: 'Долго на тесте', f: 'long_test', s: '≥ 3 дн. в статусе Test' },
 ]
 // По клику на плитку «разрывов» её фильтры сбрасываются (как в макете).
-function openTab(t: LCTab) { setQuery(t === 'gaps' ? { tab: t, q: undefined, pr: undefined, miss: undefined, kind: undefined } : { tab: t }) }
+function openTab(t: LCTab) { setQuery({ tab: t, who: undefined, tst: undefined, ...(t === 'gaps' ? { q: undefined, pr: undefined, miss: undefined, kind: undefined } : {}) }) }
 
 // ---------- таблицы ----------
 const J = jiraBase
@@ -79,11 +79,13 @@ const COLS: Record<LCTab, LcCol[]> = {
     { f: 'other_tasks', label: 'Что делал у других', cls: 'x', html: links('other_tasks') },
   ],
   gaps: [
-    { f: 'key', label: 'Задача', cls: 'k', html: key('key') },
+    { f: 'key', label: 'Задача', cls: 'w', html: r => `${key('key')(r)}<div class="sub">${esc(r.summary || '')}</div>` },
     { f: 'priority', label: 'Приоритет', html: r => r.priority === 'Низкий' ? esc(r.priority) : flag(r.priority === 'Проверить' ? 'flag-warn' : 'flag-bad', r.priority) },
-    { f: 'kind', label: 'Тип' }, { f: 'status', label: 'Статус' }, { f: 'assignee', label: 'Исполнитель' }, { f: 'missing', label: 'Чего нет' },
+    { f: 'kind', label: 'Тип · статус', html: r => `${esc(r.kind || '—')}<div class="sub">${esc(r.status || '')}</div>` },
+    { f: 'assignee', label: 'Исполнитель · спринт', html: r => `${esc(r.assignee || '—')}<div class="sub">${esc(r.sprint || '')}</div>` },
+    { f: 'missing', label: 'Чего нет' },
     { f: 'problem', label: 'Проблема', cls: 'w', html: links('problem') }, { f: 'front', label: 'Фронт', cls: 'x', html: links('front') },
-    { f: 'back', label: 'Бэк', cls: 'x', html: links('back') }, { f: 'sprint', label: 'Спринт' }, { f: 'summary', label: 'Название', cls: 'w' },
+    { f: 'back', label: 'Бэк', cls: 'x', html: links('back') },
     { f: 'create_url', label: 'Действия', html: r => `<span class="lc-act">${r.create_url ? `<a href="${esc(r.create_url)}" target="_blank" rel="noopener">Создать продолжение</a>` : ''}<button type="button" data-ignore="${esc(r.key)}" title="Продолжение не нужно: скрыть из списка и больше не уведомлять">Игнорировать</button></span>` },
   ],
   test: [
@@ -99,7 +101,8 @@ const sortOf = (t: LCTab) => sorts[t] || DEF[t]
 
 const Q = computed(() => qs('q').toLowerCase())
 const ALL = computed(() => qs('all') === '1')
-const rowsOf = (t: LCTab) => {
+// Строки вкладки с общими фильтрами (без фильтров по человеку).
+const baseRowsOf = (t: LCTab) => {
   const rows = (R.value?.[SRC[t]] as any[] | undefined) || []
   const keep = (r: any) => {
     switch (t) {
@@ -112,11 +115,20 @@ const rowsOf = (t: LCTab) => {
   }
   return rows.filter(r => keep(r) && (!Q.value || COLS[t].some(c => String(r[c.f] ?? '').toLowerCase().includes(Q.value))))
 }
-const rows = computed(() => rowsOf(tab.value))
+const baseRows = computed(() => baseRowsOf(tab.value))
+// Исполнитель/сотрудник и тестировщик: значение из адреса, если оно есть среди строк вкладки.
+const WHO_LABEL = computed(() => tab.value === 'people' ? 'Сотрудник' : 'Исполнитель')
+const NONE_LABEL = computed(() => tab.value === 'people' ? 'не указан' : 'не назначен')
+const hasTester = computed(() => tab.value === 'test')
+const validWho = computed(() => countBy(baseRows.value, r => personOf(tab.value, r), '').some(o => o.value === qs('who')) ? qs('who') : '')
+const validTst = computed(() => hasTester.value && countBy(baseRows.value, testerOf, '').some(o => o.value === qs('tst')) ? qs('tst') : '')
+const whoOpts = computed(() => countBy(baseRows.value.filter(r => matchWho(testerOf(r), validTst.value) || !hasTester.value), r => personOf(tab.value, r), NONE_LABEL.value))
+const tstOpts = computed(() => countBy(baseRows.value.filter(r => matchWho(personOf(tab.value, r), validWho.value)), testerOf, 'не указан'))
+const rows = computed(() => baseRows.value.filter(r => matchWho(personOf(tab.value, r), validWho.value) && (!hasTester.value || matchWho(testerOf(r), validTst.value))))
 const rowKey = (r: any) => tab.value === 'people' ? `${r.lead},${r.person}` : `${r.lead},${r.key}`
 const NOTE: Record<LCTab, string[]> = {
   blocked: ['Кто кого ждёт: фронт ждёт связанные задачи дизайна и бэка, бэк (и ИИ) ждёт только дизайн, дизайн никого не ждёт. Задачи берутся по связям в Jira. «Ждёт задачу» — первая блокирующая задача, ещё не дошедшая до теста (сначала бэк, потом дизайн); красным — она даже не начата. Если все блокирующие задачи уже на тесте или дальше — «Можно снимать блок» с датой, когда последняя из них ушла на тест.'],
-  work: ['«В работе», Code review и Need Rework. Дни в статусе — с последнего перехода в него по истории Jira; «с начала» — с первого перехода в «В работе». Красным — от 10 дн., оранжевым — от 5.'],
+  work: ['«В работе», Code review и Need Rework. Дни в статусе — с последнего перехода в него по истории Jira; «с начала» — с момента, когда задачу взяли в работу. Красным — от 10 дн., оранжевым — от 5.'],
   people: ['Считаются действия самого сотрудника по истории Jira: «взял» — перевёл задачу в «В работе», «завершил» — перевёл в Code review, Test или дальше. «Тормозит» — у него есть задачи этого руководителя в «Сделать», «В работе» или Need Rework без смены статуса ≥ 3 дн., а за последние 7 дней он брал и завершал задачи других руководителей чаще, чем делал что-то по задачам этого руководителя. Тестировщики и ПМ не помечаются.'],
   gaps: ['Только задачи текущего спринта. Плитка показывает число строк этой таблицы; по клику на плитку фильтры сбрасываются. Приоритет: «Высокий» — нет задачи на фронт; «Проверить» — найдена только похожая задача или бэк готов без фронта; «Низкий» — дизайн без бэка, дизайн-задачи без разработки, исправления ошибок.',
     'Пара ищется по связи Relate, по одинаковому названию после «Дизайн -» / «Фронт -» / «БЭК -» и по похожему названию («похоже N%» — проверить вручную). Готовый фронт без бэка проблемой не считается.'],
@@ -155,6 +167,52 @@ function onTableClick(e: MouseEvent) {
   const k = (e.target as HTMLElement).closest<HTMLElement>('[data-ignore]')?.dataset.ignore
   if (k) ignore(k)
 }
+// ---------- выгрузка в Excel: то, что на экране (фильтры и сортировка), сервер собирает .xlsx ----------
+const GAPS_EXPORT = [
+  { f: 'key', label: 'Задача' }, { f: 'summary', label: 'Название' }, { f: 'priority', label: 'Приоритет' }, { f: 'kind', label: 'Тип' },
+  { f: 'status', label: 'Статус' }, { f: 'assignee', label: 'Исполнитель' }, { f: 'sprint', label: 'Спринт' }, { f: 'missing', label: 'Чего нет' },
+  { f: 'problem', label: 'Проблема' }, { f: 'front', label: 'Фронт' }, { f: 'back', label: 'Бэк' }, { f: 'create_url', label: 'Создать продолжение (ссылка)' },
+]
+const exportCols = (t: LCTab) => t === 'gaps' ? GAPS_EXPORT : COLS[t].map(c => ({ f: c.f, label: c.label }))
+const activeFilters = computed(() => {
+  const out: string[] = []
+  if (qs('q')) out.push(`Поиск: ${qs('q')}`)
+  if (tab.value === 'work' && !ALL.value) out.push('только ≥ 5 дн. в статусе')
+  if (tab.value === 'test' && !ALL.value) out.push('только ≥ 3 дн. на тесте')
+  if (tab.value === 'people' && !ALL.value) out.push('только с сигналом')
+  if (tab.value === 'gaps') for (const [k, l] of [['pr', 'Приоритет'], ['miss', 'Чего нет'], ['kind', 'Тип']] as const) if (qs(k)) out.push(`${l}: ${qs(k)}`)
+  const label = (opts: { value: string; label: string }[], v: string) => opts.find(o => o.value === v)?.label ?? v
+  if (validWho.value) out.push(`${WHO_LABEL.value}: ${label(whoOpts.value, validWho.value)}`)
+  if (validTst.value) out.push(`Тестировщик: ${label(tstOpts.value, validTst.value)}`)
+  return out
+})
+const exporting = ref(false)
+async function exportExcel() {
+  exporting.value = true; actMsg.value = ''
+  try {
+    const cols = exportCols(tab.value)
+    const sorted = sortRows(rows.value, sortOf(tab.value))
+    const keyCol = cols.findIndex(c => c.f === 'key')
+    const res = await $fetch.raw<Blob>(`${apiBase}/lead-control/export`, {
+      method: 'POST', responseType: 'blob',
+      body: {
+        title: TITLE[tab.value], lead: lead.value, project: proj.value === 'all' ? 'Все проекты' : (projects.value.find(p => p.key === proj.value)?.title || proj.value) + ` (${proj.value})`,
+        filters: activeFilters.value, updated: updated.value, columns: cols.map(c => c.label), key_col: keyCol >= 0 ? keyCol : null,
+        rows: sorted.map(r => cols.map(c => r[c.f] ?? null)),
+      },
+    })
+    const cd = res.headers.get('content-disposition') || ''
+    const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)
+    const name = star ? decodeURIComponent(star[1]) : 'lead-control.xlsx'
+    const href = URL.createObjectURL(res._data as Blob)
+    const a = Object.assign(document.createElement('a'), { href, download: name })
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 10000)
+    actMsg.value = `Файл «${name}» скачан (${sorted.length} строк)`
+  } catch (e: any) {
+    actMsg.value = e?.data?.error || (e?.statusCode ? `Не удалось выгрузить (HTTP ${e.statusCode})` : 'Не удалось выгрузить')
+  } finally { exporting.value = false }
+}
 const showIgnored = ref(false)
 const fmtAt = (s: string) => new Date(s).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 useHead({ title: 'Контроль спринта — Отчёты Adata' })
@@ -178,7 +236,7 @@ useHead({ title: 'Контроль спринта — Отчёты Adata' })
     <template v-else-if="leads">
       <div class="lc-bar" role="group" aria-label="Руководитель">
         <span class="lc-lbl">Руководитель</span>
-        <button v-for="l in leads" :key="l.lead" type="button" class="lc-chip" :aria-pressed="l.lead === lead" @click="setQuery({ lead: l.lead, proj: undefined })">{{ l.lead }}</button>
+        <button v-for="l in leads" :key="l.lead" type="button" class="lc-chip" :aria-pressed="l.lead === lead" @click="setQuery({ lead: l.lead, proj: undefined, who: undefined, tst: undefined })">{{ l.lead }}</button>
       </div>
       <div class="lc-bar" role="group" aria-label="Проект">
         <span class="lc-lbl">Проект</span>
@@ -203,12 +261,25 @@ useHead({ title: 'Контроль спринта — Отчёты Adata' })
             <label>Тип <select :value="qs('kind')" @change="setQuery({ kind: ($event.target as HTMLSelectElement).value })"><option value="">все</option><option>Дизайн</option><option>Бэк</option></select></label>
           </template>
           <label v-if="ALL_LABEL[tab]"><input type="checkbox" :checked="ALL" @change="setQuery({ all: ($event.target as HTMLInputElement).checked ? '1' : undefined })"> {{ ALL_LABEL[tab] }}</label>
+          <label>{{ WHO_LABEL }}
+            <select :value="validWho" :aria-label="WHO_LABEL" @change="setQuery({ who: ($event.target as HTMLSelectElement).value })">
+              <option value="">все</option>
+              <option v-for="o in whoOpts" :key="o.value" :value="o.value">{{ o.label }} ({{ o.n }})</option>
+            </select>
+          </label>
+          <label v-if="hasTester">Тестировщик
+            <select :value="validTst" aria-label="Тестировщик" @change="setQuery({ tst: ($event.target as HTMLSelectElement).value })">
+              <option value="">все</option>
+              <option v-for="o in tstOpts" :key="o.value" :value="o.value">{{ o.label }} ({{ o.n }})</option>
+            </select>
+          </label>
           <input type="search" :value="qs('q')" placeholder="Поиск" aria-label="Поиск" @input="setQuery({ q: ($event.target as HTMLInputElement).value })">
           <span class="sub">{{ rows.length }} строк</span>
+          <button type="button" class="btn sm" :disabled="exporting || !rows.length" title="Скачать таблицу в Excel — с текущими фильтрами и сортировкой" @click="exportExcel">{{ exporting ? 'Готовлю файл…' : 'Скачать в Excel' }}</button>
           <span v-if="actMsg" class="sub" role="status">{{ actMsg }}</span>
         </div>
         <p v-if="pending && !R" class="lc-empty">Загрузка…</p>
-        <LcTable v-else :cols="COLS[tab]" @click="onTableClick" :rows="rows" :sort="sortOf(tab)" :row-class="HOT[tab] as (r: any) => string" :row-key="rowKey"
+        <LcTable v-else :cols="COLS[tab]" @click="onTableClick" :rows="rows" :sort="sortOf(tab)" :row-class="HOT[tab] as (r: any) => string" :row-key="rowKey" :fit="tab === 'gaps'"
                  empty="Нет задач по этому фильтру." @sort="s => (sorts[tab] = s)" />
         <div v-if="tab === 'gaps' && R?.ignored?.length" class="lc-ignored">
           <button type="button" class="linkbtn" @click="showIgnored = !showIgnored">{{ showIgnored ? 'Скрыть' : 'Показать' }} скрытые («продолжение не нужно»): {{ R.ignored.length }}</button>

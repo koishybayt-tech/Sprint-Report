@@ -56,7 +56,9 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 			// Контроль спринта руководителей: admin и lead; хендлеры — по сгенерированному lcapi (api/openapi.yaml).
 			r.Group(func(r chi.Router) {
 				r.Use(requireLeadAccess, requireModule(auth.ModLeadControl))
-				lcapi.HandlerFromMux(&leadControlServer{pool: pool, log: log, jiraBase: cfg.JiraBaseURL, notify: nt}, r)
+				lcs := &leadControlServer{pool: pool, log: log, jiraBase: cfg.JiraBaseURL, notify: nt}
+				lcapi.HandlerFromMux(lcs, r)
+				r.Post("/lead-control/export", lcs.exportXLSX) // выгрузка в Excel того, что на экране (с фильтрами)
 
 				// Уведомления руководителя: какие события присылать и личный Telegram-бот.
 				r.Get("/notifications/settings", notifySettings(nt, log))
