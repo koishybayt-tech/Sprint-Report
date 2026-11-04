@@ -141,7 +141,7 @@ type InWorkRow struct {
 	Assignee          string `json:"assignee"`
 	Role              string `json:"role"`
 	DaysInStatus      int    `json:"days_in_status"`
-	DaysSinceStart    *int   `json:"days_since_start"` // с первого перехода в «В работе»; null — не было
+	DaysSinceStart    *int   `json:"days_since_start"` // с момента, когда взяли в работу (takenAt); null — не брали или нет истории
 	TotalDaysInStatus int    `json:"total_days_in_status"`
 	Reworks           int    `json:"reworks"` // переходов в Need Rework
 	Sprints           int    `json:"sprints"`
@@ -168,7 +168,7 @@ func InWork(in *Input) []InWorkRow {
 }
 
 func sinceStart(now time.Time, is *Issue) *int {
-	if t := firstEnter(is, stWork); t != nil {
+	if t := takenAt(is); t != nil {
 		d := days(now, *t)
 		return &d
 	}

@@ -364,3 +364,45 @@ func TestGapIgnoreAndCreateURL(t *testing.T) {
 		t.Errorf("игнор: gaps=%+v ignored=%+v", rep.Gaps, rep.Ignored)
 	}
 }
+
+func TestCanonStatus(t *testing.T) {
+	for in, want := range map[string]string{"In Progress": "В работе", "To Do": "Сделать", "Done": "Готово", "Need clarification": "Требует уточнения",
+		"Test": "Test", "Code review": "Code review", "В работе": "В работе"} {
+		if got := CanonStatus(in); got != want {
+			t.Errorf("CanonStatus(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if c := CanonChange(Change{Field: "assignee", From: "To Do", To: "Done"}); c.From != "To Do" || c.To != "Done" {
+		t.Error("не статусные поля не должны меняться")
+	}
+}
+
+// Реальная история Jira хранит статусы по-английски; дни «в работе» считаются от момента, когда задачу взяли, а не от создания.
+func TestInWorkCountsFromTaken(t *testing.T) {
+	row := func(is *Issue) InWorkRow {
+		for i, c := range is.Changes {
+			is.Changes[i] = CanonChange(c)
+		}
+		return InWork(input(is))[0]
+	}
+	// создана 28 дней назад, взята в работу 5 дней назад
+	r := row(iss("AC-1", "Бэк - API", "В работе", 28, st(5, "To Do", "In Progress", "ivanov")))
+	if r.DaysInStatus != 5 || r.DaysSinceStart == nil || *r.DaysSinceStart != 5 {
+		t.Errorf("взята 5 дней назад: в статусе %d, с начала %v", r.DaysInStatus, r.DaysSinceStart)
+	}
+	// возврат в «Сделать» обнуляет: взята 20 дн. назад, возвращена 15, взята снова 3 дн. назад
+	r = row(iss("AC-2", "Бэк - API", "В работе", 40, st(20, "To Do", "In Progress", "ivanov"), st(15, "In Progress", "To Do", "ivanov"), st(3, "To Do", "In Progress", "ivanov")))
+	if r.DaysSinceStart == nil || *r.DaysSinceStart != 3 {
+		t.Errorf("после возврата в «Сделать»: %v, ждали 3", r.DaysSinceStart)
+	}
+	// круги ревью и доработки момент взятия не сдвигают: взята 10 дн. назад, сейчас снова «В работе» после Need Rework
+	r = row(iss("AC-3", "Бэк - API", "В работе", 40, st(10, "To Do", "In Progress", "ivanov"), st(6, "In Progress", "Code review", "petrov"),
+		st(4, "Code review", "Need Rework", "petrov"), st(2, "Need Rework", "In Progress", "ivanov")))
+	if r.DaysSinceStart == nil || *r.DaysSinceStart != 10 || r.DaysInStatus != 2 {
+		t.Errorf("круги ревью: с начала %v (ждали 10), в статусе %d (ждали 2)", r.DaysSinceStart, r.DaysInStatus)
+	}
+	// нет истории — момент неизвестен, дни «с начала» не показываем
+	if r = row(iss("AC-4", "Бэк - API", "В работе", 9)); r.DaysSinceStart != nil {
+		t.Errorf("без истории: %v, ждали nil", r.DaysSinceStart)
+	}
+}

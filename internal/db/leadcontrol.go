@@ -141,7 +141,7 @@ func loadLeadControlData(ctx context.Context, pool *pgxpool.Pool, leads map[stri
 			return nil, err
 		}
 		if is := d.issues[key]; is != nil {
-			is.Changes = append(is.Changes, c)
+			is.Changes = append(is.Changes, leadcontrol.CanonChange(c))
 		}
 	}
 	crows.Close()

@@ -223,6 +223,47 @@ func statusChanges(is *Issue) []Change {
 	return out
 }
 
+// CanonStatus — русское имя статуса, как у самих задач. В истории Jira (changelog) «В работе», «Сделать» и «Готово»
+// записаны по-английски (In Progress, To Do, Done): без приведения переход в «В работе» не находится и дни считаются
+// от создания задачи. Остальные статусы в истории и у задач называются одинаково.
+func CanonStatus(s string) string {
+	switch s {
+	case "In Progress":
+		return stWork
+	case "To Do":
+		return stTodo
+	case "Done":
+		return "Готово"
+	case "Need clarification":
+		return "Требует уточнения"
+	}
+	return s
+}
+
+// CanonChange приводит имена статусов в записи истории к русским (остальные поля не трогает).
+func CanonChange(c Change) Change {
+	if c.Field == "status" {
+		c.From, c.To = CanonStatus(c.From), CanonStatus(c.To)
+	}
+	return c
+}
+
+// takenAt — когда задачу взяли в работу: первый переход в «В работе» после последнего возврата в «Сделать»
+// (nil — переходов в «В работе» не было, например нет истории). Круги ревью и доработки момент не сдвигают.
+func takenAt(is *Issue) *time.Time {
+	var t *time.Time
+	for _, c := range statusChanges(is) {
+		switch {
+		case c.To == stWork && t == nil:
+			at := c.At
+			t = &at
+		case c.To == stTodo:
+			t = nil
+		}
+	}
+	return t
+}
+
 // lastEnter — когда задача последний раз перешла в статус; без такого перехода — создание задачи
 // (задача создана сразу в этом статусе).
 func lastEnter(is *Issue, status string) time.Time {

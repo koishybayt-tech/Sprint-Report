@@ -4,7 +4,7 @@ import { type Model, UNASSIGNED, pct } from './sprints'
 import { type PeopleLogic, absTxt } from './sprintsPeople'
 
 export const TV = {
-  longWork: 5, // «Долго в работе»: от 5 дн. в статусе (как в «Контроле спринта»)
+  longWork: 5, // «Долго в работе»: от 5 дн. с момента, когда задачу взяли в работу
   longTest: 3, // «Долго на тесте»: от 3 дн.
   lag: 25, // проект отстаёт, если готовность меньше прошедшего времени спринта больше чем на 25 п.п. (как в дэшбордах)
   testWarn: 8, // задач в Test у проекта: от 8 — внимание, от 15 — тревога
@@ -13,7 +13,9 @@ export const TV = {
 }
 
 // Строки «Контроля спринта руководителей» (GET /lead-control?lead=): только нужные экрану поля.
-export type LcInWork = { key: string; project: string; status: string; assignee: string; days_in_status: number; summary: string }
+export type LcInWork = { key: string; project: string; status: string; assignee: string; days_in_status: number; days_since_start?: number | null; summary: string }
+// Сколько дней задача в работе: от момента, когда её взяли («В работе»); нет истории — от последней смены статуса.
+export const workDays = (x: Pick<LcInWork, 'days_in_status' | 'days_since_start'>) => x.days_since_start ?? x.days_in_status
 export type LcTesting = { key: string; project: string; assignee: string; tester: string; days_in_test: number; summary: string }
 export type LcBlocked = { key: string; project: string; assignee: string; days_blocked: number; block_state: string; summary: string }
 export type LcReport = { in_work?: LcInWork[] | null; testing?: LcTesting[] | null; blocked?: LcBlocked[] | null }
@@ -59,7 +61,7 @@ export const testLevel = (n: number): Level => n >= TV.testHigh ? 'bad' : n >= T
 export const daysLevel = (d: number, warn: number, bad: number): Level => d >= bad ? 'bad' : d >= warn ? 'warn' : ''
 
 export function buildTv(m: Model, pl: PeopleLogic, lc: LcReport[]) {
-  const inWork = dedupe(lc.flatMap(r => r.in_work ?? [])).filter(x => x.days_in_status >= TV.longWork).sort((a, b) => b.days_in_status - a.days_in_status)
+  const inWork = dedupe(lc.flatMap(r => r.in_work ?? [])).filter(x => workDays(x) >= TV.longWork).sort((a, b) => workDays(b) - workDays(a))
   const testing = dedupe(lc.flatMap(r => r.testing ?? [])).filter(x => x.days_in_test >= TV.longTest).sort((a, b) => b.days_in_test - a.days_in_test)
   const blocked = dedupe(lc.flatMap(r => r.blocked ?? [])).sort((a, b) => b.days_blocked - a.days_blocked)
 
@@ -87,7 +89,7 @@ export function buildTv(m: Model, pl: PeopleLogic, lc: LcReport[]) {
   return {
     kpi, absent, need, tests, risks, blocked,
     slowTests: testing, slowTesters: groupLong(testing, x => x.tester, x => x.days_in_test, 'без тестировщика'),
-    slowWork: inWork, slowDevs: groupLong(inWork, x => x.assignee, x => x.days_in_status, UNASSIGNED),
+    slowWork: inWork, slowDevs: groupLong(inWork, x => x.assignee, workDays, UNASSIGNED),
   }
 }
 export type Tv = ReturnType<typeof buildTv>

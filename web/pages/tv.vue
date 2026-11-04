@@ -3,7 +3,7 @@
 // Данные — GET /tv/report и /tv/lead-control (доступ по модулю «ТВ»); расчёты — utils/tv.ts. Двойной клик — полный экран.
 import { type ApiReport, buildModel } from '~/utils/sprints'
 import { defaultCtl, peopleLogic } from '~/utils/sprintsPeople'
-import { type LcReport, TV, buildTv, daysLevel } from '~/utils/tv'
+import { type LcReport, TV, buildTv, daysLevel, workDays } from '~/utils/tv'
 
 definePageMeta({ layout: 'tv' })
 useHead({ title: 'ТВ — Отчёты Adata' })
@@ -189,12 +189,12 @@ const kpis = computed(() => {
 
         <!-- 5. долго в работе -->
         <section class="tv-p">
-          <h2>Долго в работе <small>≥ {{ TV.longWork }} дн. в статусе</small><i>{{ tv.slowWork.length }}</i></h2>
+          <h2>Долго в работе <small>≥ {{ TV.longWork }} дн. с момента взятия</small><i>{{ tv.slowWork.length }}</i></h2>
           <h3>Задачи</h3>
           <ul data-fit :data-total="tv.slowWork.length">
             <li v-for="x in tv.slowWork.slice(0, CAP)" :key="x.key">
               <b>{{ x.key }}</b><span class="tv-pos">{{ short(x.assignee || 'не назначен', 22) }} · {{ x.status }}</span>
-              <em :class="daysLevel(x.days_in_status, TV.longWork, 10)">{{ x.days_in_status }} {{ dnoun(x.days_in_status) }}</em>
+              <em :class="daysLevel(workDays(x), TV.longWork, 10)">{{ workDays(x) }} {{ dnoun(workDays(x)) }}</em>
             </li>
             <li v-if="!tv.slowWork.length" class="tv-ok">Долгих задач нет</li>
           </ul>

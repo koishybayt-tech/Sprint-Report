@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TV, dedupe, daysLevel, groupLong, projectRisks, testLevel } from './tv'
+import { TV, dedupe, daysLevel, groupLong, projectRisks, testLevel, workDays } from './tv'
 
 describe('dedupe', () => {
   it('одна задача у нескольких руководителей считается один раз', () => {
@@ -17,6 +17,15 @@ describe('groupLong', () => {
     expect(g.map(x => [x.name, x.count, x.max])).toEqual([['Иван', 2, 9], ['не назначен', 2, 7], ['Пётр', 1, 12]])
   })
   it('собирает ключи задач', () => { expect(g[0].keys).toEqual(['A-1', 'A-2']) })
+})
+
+describe('workDays', () => {
+  it('считаем от момента взятия в работу, а без истории — от последней смены статуса', () => {
+    expect(workDays({ days_in_status: 28, days_since_start: 5 })).toBe(5)
+    expect(workDays({ days_in_status: 28, days_since_start: null })).toBe(28)
+    expect(workDays({ days_in_status: 7 })).toBe(7)
+    expect(workDays({ days_in_status: 3, days_since_start: 0 })).toBe(0)
+  })
 })
 
 describe('уровни', () => {
