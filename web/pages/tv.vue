@@ -209,6 +209,20 @@ const kpis = computed(() => {
           <p class="tv-more" />
                   </section>
 
+        <!-- 7. спринты с низким % закрытия — высокая колонка справа -->
+        <section class="tv-p tv-sprints">
+          <h2>Низкий % закрытия <small>отстают по времени</small><i>{{ tv.lowSprints.length }}</i></h2>
+          <ul data-fit :data-total="tv.lowSprints.length">
+            <li v-for="s in tv.lowSprints.slice(0, 40)" :key="s.k" class="tv-two">
+              <div><b>{{ s.k }}</b><span class="tv-pos">{{ short(s.sprint || s.name, 22) }}</span><em :class="s.level">{{ s.done }}%</em></div>
+              <div class="tv-spbar" :title="'Готово ' + s.done + '%, прошло ' + s.time + '% времени'"><i :class="s.level" :style="{ width: Math.min(100, s.done) + '%' }" /><u :style="{ left: Math.min(100, s.time) + '%' }" /></div>
+              <div class="tv-pos">{{ short(s.lead, 24) }} · прошло {{ s.time }}%<template v-if="Number.isFinite(s.left)"> · {{ s.left < 0 ? 'просрочен на ' + -s.left + ' дн.' : 'осталось ' + s.left + ' дн.' }}</template></div>
+            </li>
+            <li v-if="!tv.lowSprints.length" class="tv-ok">Все спринты идут по плану</li>
+          </ul>
+          <p class="tv-more" />
+        </section>
+
         <!-- 6. Blocked -->
         <section class="tv-p">
           <h2>Заблокированные задачи<i>{{ tv.blocked.length }}</i></h2>
@@ -248,7 +262,8 @@ const kpis = computed(() => {
 .tv-k span{color:var(--mute);font-size:.85em}
 .tv-k.bad{border-color:var(--bad)}.tv-k.bad b{color:var(--bad)}
 .tv-k.warn{border-color:var(--warn)}.tv-k.warn b{color:var(--warn)}
-.tv-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:.9vw}
+.tv-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;gap:.9vw}
+.tv-sprints{grid-column:4;grid-row:1 / span 2}
 .tv-p{min-height:0;overflow:hidden;background:var(--card);border:1px solid var(--line);border-radius:.7em;padding:1vh 1vw;display:flex;flex-direction:column}
 .tv-p h2{margin:0 0 .5vh;font-size:1.3em;display:flex;align-items:baseline;gap:.6vw}
 .tv-p h2 small{font-size:.62em;font-weight:500;color:var(--mute)}
@@ -268,7 +283,7 @@ const kpis = computed(() => {
 .tv-more{margin:0;color:var(--mute);font-size:.8em;text-align:right}
 .tv-more:empty{display:none}
 .tv-risk{flex-wrap:wrap}
-.tv-two{flex-direction:column;align-items:stretch;gap:.1vh}
+.tv-p .tv-two{flex-direction:column;align-items:stretch;gap:.1vh}
 .tv-two>div:first-child{display:flex;align-items:baseline;gap:.6vw;min-width:0}
 .tv-chips{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:0 .8vw;font-size:.86em}
 .tv-two .tv-chips{margin-left:0;justify-content:flex-start}
@@ -279,4 +294,9 @@ const kpis = computed(() => {
 .tv-bar i{display:block;height:100%;background:#4aa3ff;border-radius:.4em}
 .tv-bar i.warn{background:var(--warn)}.tv-bar i.bad{background:var(--bad)}
 .tv-bars em{margin-left:0!important;min-width:1.6em;text-align:right}
+/* спринт: полоса готовности и отметка «сколько времени прошло» */
+.tv-spbar{position:relative;height:.7em;background:var(--line);border-radius:.4em;margin:.35em 0 .25em}
+.tv-spbar i{display:block;height:100%;background:#4aa3ff;border-radius:.4em}
+.tv-spbar i.warn{background:var(--warn)}.tv-spbar i.bad{background:var(--bad)}
+.tv-spbar u{position:absolute;top:-.25em;bottom:-.25em;width:2px;background:var(--fg);opacity:.85;text-decoration:none}
 </style>

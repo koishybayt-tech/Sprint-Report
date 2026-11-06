@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TV, dedupe, daysLevel, groupLong, projectRisks, testLevel, workDays } from './tv'
+import { TV, dedupe, daysLevel, groupLong, lowSprints, projectRisks, testLevel, workDays } from './tv'
 
 describe('dedupe', () => {
   it('одна задача у нескольких руководителей считается один раз', () => {
@@ -17,6 +17,26 @@ describe('groupLong', () => {
     expect(g.map(x => [x.name, x.count, x.max])).toEqual([['Иван', 2, 9], ['не назначен', 2, 7], ['Пётр', 1, 12]])
   })
   it('собирает ключи задач', () => { expect(g[0].keys).toEqual(['A-1', 'A-2']) })
+})
+
+describe('lowSprints', () => {
+  const P = (o: object) => ({ k: 'X', n: 'Проект', lead: 'Лид', sp: 'X 1', t: 10, done: 60, time: 60, left: 5, ...o }) as any
+  const run = (ps: any[]) => lowSprints({ PR: ps } as any)
+  it('здоровые и только начавшиеся спринты не показываем', () => {
+    expect(run([P({ k: 'OK', done: 70, time: 60 }), P({ k: 'NEW', done: 0, time: 10 }), P({ k: 'EMPTY', t: 0, done: 0, time: 90 })])).toEqual([])
+  })
+  it('уровни: тревога — готово < 30% или отставание > 25 п.п., внимание — < 50% или отставание > 10 п.п.', () => {
+    const r = run([P({ k: 'BADLOW', done: 20, time: 40 }), P({ k: 'BADLAG', done: 60, time: 90 }), P({ k: 'WARNLOW', done: 45, time: 50 }), P({ k: 'WARNLAG', done: 70, time: 85 })])
+    expect(Object.fromEntries(r.map(x => [x.k, x.level]))).toEqual({ BADLOW: 'bad', BADLAG: 'bad', WARNLOW: 'warn', WARNLAG: 'warn' })
+  })
+  it('самые низкие сверху; при равенстве — у кого прошло больше времени', () => {
+    const r = run([P({ k: 'B', done: 40, time: 60 }), P({ k: 'A', done: 10, time: 50 }), P({ k: 'C', done: 40, time: 90 })])
+    expect(r.map(x => x.k)).toEqual(['A', 'C', 'B'])
+  })
+  it('граница минимального времени', () => {
+    expect(run([P({ k: 'Z', done: 5, time: TV.minTime - 1 })])).toEqual([])
+    expect(run([P({ k: 'Z', done: 5, time: TV.minTime })]).length).toBe(1)
+  })
 })
 
 describe('workDays', () => {

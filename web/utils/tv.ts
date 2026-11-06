@@ -10,6 +10,9 @@ export const TV = {
   testWarn: 8, // задач в Test у проекта: от 8 — внимание, от 15 — тревога
   testHigh: 15,
   absentDays: 14, // отсутствия на ближайшие 14 дней (как в дэшбордах)
+  // «Низкий % закрытия» спринта: учитываем спринты, где прошло не меньше 20% времени (в начале спринта 0% — норма);
+  // тревога — готово меньше 30% или отставание от времени больше 25 п.п. (TV.lag), внимание — меньше 50% или отставание больше 10 п.п.
+  minTime: 20, doneBad: 30, doneWarn: 50, lagWarn: 10,
 }
 
 // Строки «Контроля спринта руководителей» (GET /lead-control?lead=): только нужные экрану поля.
@@ -60,6 +63,19 @@ export type Level = 'bad' | 'warn' | ''
 export const testLevel = (n: number): Level => n >= TV.testHigh ? 'bad' : n >= TV.testWarn ? 'warn' : ''
 export const daysLevel = (d: number, warn: number, bad: number): Level => d >= bad ? 'bad' : d >= warn ? 'warn' : ''
 
+export type LowSprint = { k: string; name: string; lead: string; sprint: string; done: number; time: number; left: number; level: Level }
+// Спринты с низким процентом закрытия (доля задач в «Готово»): самые низкие сверху; здоровые и только начавшиеся не показываем.
+export function lowSprints(m: Pick<Model, 'PR'>): LowSprint[] {
+  const out: LowSprint[] = []
+  for (const p of m.PR) {
+    if (!p.t || p.time < TV.minTime) continue
+    const lag = p.time - p.done
+    const level: Level = p.done < TV.doneBad || lag > TV.lag ? 'bad' : p.done < TV.doneWarn || lag > TV.lagWarn ? 'warn' : ''
+    if (level) out.push({ k: p.k, name: p.n, lead: p.lead, sprint: p.sp, done: p.done, time: p.time, left: p.left, level })
+  }
+  return out.sort((a, b) => a.done - b.done || b.time - a.time || a.k.localeCompare(b.k))
+}
+
 export function buildTv(m: Model, pl: PeopleLogic, lc: LcReport[]) {
   const inWork = dedupe(lc.flatMap(r => r.in_work ?? [])).filter(x => workDays(x) >= TV.longWork).sort((a, b) => workDays(b) - workDays(a))
   const testing = dedupe(lc.flatMap(r => r.testing ?? [])).filter(x => x.days_in_test >= TV.longTest).sort((a, b) => b.days_in_test - a.days_in_test)
@@ -87,7 +103,7 @@ export function buildTv(m: Model, pl: PeopleLogic, lc: LcReport[]) {
     longWork: inWork.length, longTest: testing.length,
   }
   return {
-    kpi, absent, need, tests, risks, blocked,
+    kpi, absent, need, tests, risks, blocked, lowSprints: lowSprints(m),
     slowTests: testing, slowTesters: groupLong(testing, x => x.tester, x => x.days_in_test, 'без тестировщика'),
     slowWork: inWork, slowDevs: groupLong(inWork, x => x.assignee, workDays, UNASSIGNED),
   }
