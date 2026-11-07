@@ -59,6 +59,26 @@ func UserLeadLabel(ctx context.Context, pool *pgxpool.Pool, userID int64) (strin
 	return n, err
 }
 
+// LeadsOfUsers — «руководители» справочника у группы пользователей: те, под кем им назначены проекты, и те, чьё имя
+// совпадает с сотрудником пользователя (руководитель из Jira). Нужен менеджеру, чтобы увидеть проекты подчинённых.
+func LeadsOfUsers(ctx context.Context, pool *pgxpool.Pool, userIDs []int64) ([]string, error) {
+	if len(userIDs) == 0 {
+		return []string{}, nil
+	}
+	rows, err := pool.Query(ctx, `SELECT lead FROM lead_projects WHERE user_id = ANY($1)
+		UNION
+		SELECT lp.lead FROM lead_projects lp JOIN employees e ON e.full_name = lp.lead JOIN users u ON u.employee_id = e.id WHERE u.id = ANY($1)
+		ORDER BY 1`, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if out == nil {
+		out = []string{}
+	}
+	return out, err
+}
+
 // UserLeads — руководители, под которыми пользователю назначены проекты.
 func UserLeads(ctx context.Context, pool *pgxpool.Pool, userID int64) ([]string, error) {
 	rows, err := pool.Query(ctx, `SELECT DISTINCT lead FROM lead_projects WHERE user_id = $1 ORDER BY lead`, userID)

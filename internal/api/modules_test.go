@@ -42,6 +42,7 @@ func TestRequireLeadAccess(t *testing.T) {
 		{"руководитель", auth.User{Role: auth.RoleLead}, http.StatusOK},
 		{"сотрудник с назначенным проектом", auth.User{Role: auth.RoleEmployee, HasProjects: true}, http.StatusOK},
 		{"сотрудник без проектов", auth.User{Role: auth.RoleEmployee}, http.StatusForbidden},
+		{"руководитель группы без своих проектов", auth.User{Role: auth.RoleEmployee, HasTeam: true}, http.StatusOK},
 		{"HR без проектов", auth.User{Role: auth.RoleHR}, http.StatusForbidden},
 	}
 	for _, c := range cases {

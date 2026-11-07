@@ -108,6 +108,20 @@ func (s *leadControlServer) visibleLeads(r *http.Request) ([]string, map[string]
 			own = append(own, l)
 		}
 	}
+	// Подчинённые (в том числе подчинённые подчинённых) и их проекты — после своих.
+	subs, err := auth.NewStore(s.pool).Subordinates(r.Context(), u.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	team, err := db.LeadsOfUsers(r.Context(), s.pool, subs)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, l := range team {
+		if _, ok := by[l]; ok && !containsStr(own, l) {
+			own = append(own, l)
+		}
+	}
 	if u.Role != auth.RoleAdmin {
 		return own, by, nil
 	}

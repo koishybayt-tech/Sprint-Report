@@ -1,5 +1,5 @@
 // Текущий пользователь (GET /api/v1/me). null — не вошёл.
-export type Me = { id: number; login: string; full_name: string; role: 'admin' | 'lead' | 'hr' | 'employee'; employee_id: number | null; modules: string[]; has_projects?: boolean }
+export type Me = { id: number; login: string; full_name: string; role: 'admin' | 'lead' | 'hr' | 'employee'; employee_id: number | null; modules: string[]; has_projects?: boolean; has_team?: boolean }
 
 // Модули шапки: ключ совпадает с users.modules на сервере; у админа в me.modules всегда все.
 export const MODULES = [
@@ -27,7 +27,8 @@ export const canSeeSprints = (me: Me | null) => !!me && me.role !== 'hr' && hasM
 export const canSeeSnapshots = (me: Me | null) => !!me && (me.role === 'admin' || me.role === 'lead')
 // «Контроль спринта руководителей» — admin и lead (docs/lead-control.md).
 // Плюс любой пользователь, которому админ назначил проекты («Настройки → Руководители и проекты»), например ПМ.
-export const canSeeLeadControl = (me: Me | null) => (canSeeSnapshots(me) || !!me?.has_projects) && hasModule(me, 'lead_control')
+// Руководитель группы (у него есть подчинённые) видит проекты подчинённых — тоже без роли «Руководитель».
+export const canSeeLeadControl = (me: Me | null) => (canSeeSnapshots(me) || !!me?.has_projects || !!me?.has_team) && hasModule(me, 'lead_control')
 // Экран для ТВ (/tv): админу и тем, кому выдан модуль «ТВ» (данные — /api/v1/tv/*).
 export const canSeeTv = (me: Me | null) => hasModule(me, 'tv')
 export const canSeeAttendance = (me: Me | null) => hasModule(me, 'attendance')

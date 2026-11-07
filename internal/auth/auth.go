@@ -109,6 +109,8 @@ type User struct {
 	EmployeeLogin *string    `json:"employee_login"` // логин Jira связанного сотрудника
 	Modules       []string   `json:"modules"`        // у админа всегда все
 	HasProjects   bool       `json:"has_projects"`   // админ назначил пользователю проекты в «Контроле спринта»
+	ManagerID     *int64     `json:"manager_id"`     // руководитель пользователя (users.manager_id)
+	HasTeam       bool       `json:"has_team"`       // у пользователя есть активные подчинённые
 	Active        bool       `json:"active"`
 	CreatedAt     time.Time  `json:"created_at"`
 	LastLoginAt   *time.Time `json:"last_login_at"`
@@ -154,11 +156,12 @@ var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-password-for-timing
 
 const userCols = `id, login, full_name, role, employee_id, active, created_at, last_login_at,
 	(SELECT jira_login FROM employees e WHERE e.id = employee_id), modules,
-	EXISTS (SELECT 1 FROM lead_projects lp WHERE lp.user_id = users.id)`
+	EXISTS (SELECT 1 FROM lead_projects lp WHERE lp.user_id = users.id), manager_id,
+	EXISTS (SELECT 1 FROM users sub WHERE sub.manager_id = users.id AND sub.active)`
 
 func scanUser(r pgx.Row) (User, error) {
 	var u User
-	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &u.HasProjects)
+	err := r.Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &u.HasProjects, &u.ManagerID, &u.HasTeam)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}
@@ -180,7 +183,7 @@ func (s *Store) Authenticate(ctx context.Context, login, password string) (User,
 	var hash string
 	var u User
 	err := s.pool.QueryRow(ctx, `SELECT `+userCols+`, password_hash FROM users WHERE lower(login) = lower($1) AND active`,
-		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &u.HasProjects, &hash)
+		strings.TrimSpace(login)).Scan(&u.ID, &u.Login, &u.FullName, &u.Role, &u.EmployeeID, &u.Active, &u.CreatedAt, &u.LastLoginAt, &u.EmployeeLogin, &u.Modules, &u.HasProjects, &u.ManagerID, &u.HasTeam, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return User{}, ErrBadCredentials
@@ -219,7 +222,8 @@ func (s *Store) Get(ctx context.Context, id int64) (User, error) {
 
 // Create добавляет пользователя. employeeLogin — логин сотрудника в Jira для связи с карточкой (необязателен).
 // modules — доступные модули шапки; nil — все.
-func (s *Store) Create(ctx context.Context, login, fullName, role, password, employeeLogin string, modules []string) (User, error) {
+// managerID — руководитель пользователя (nil — без руководителя).
+func (s *Store) Create(ctx context.Context, login, fullName, role, password, employeeLogin string, modules []string, managerID *int64) (User, error) {
 	login, fullName = strings.TrimSpace(login), strings.TrimSpace(fullName)
 	if login == "" || fullName == "" {
 		return User{}, errors.New("укажите логин и имя")
@@ -235,9 +239,14 @@ func (s *Store) Create(ctx context.Context, login, fullName, role, password, emp
 	if err != nil {
 		return User{}, err
 	}
-	u, err := scanUser(s.pool.QueryRow(ctx, `INSERT INTO users (login, full_name, role, password_hash, employee_id, modules)
-		VALUES ($1, $2, $3, $4, (SELECT id FROM employees WHERE jira_login = nullif($5, '')), $6)
-		RETURNING `+userCols, login, fullName, role, hash, strings.TrimSpace(employeeLogin), mods))
+	if managerID != nil {
+		if err := s.checkManager(ctx, 0, *managerID); err != nil {
+			return User{}, err
+		}
+	}
+	u, err := scanUser(s.pool.QueryRow(ctx, `INSERT INTO users (login, full_name, role, password_hash, employee_id, modules, manager_id)
+		VALUES ($1, $2, $3, $4, (SELECT id FROM employees WHERE jira_login = nullif($5, '')), $6, $7)
+		RETURNING `+userCols, login, fullName, role, hash, strings.TrimSpace(employeeLogin), mods, managerID))
 	if err != nil && strings.Contains(err.Error(), "users_login_key") {
 		return User{}, ErrLoginTaken
 	}
@@ -252,6 +261,62 @@ type UserPatch struct {
 	Active        *bool
 	EmployeeLogin *string
 	Modules       *[]string // nil — не трогать
+	ManagerID     *int64    // nil — не трогать; 0 — убрать руководителя
+}
+
+// Ошибки назначения руководителя — тексты начинаются с «руководитель» (API отвечает 400).
+var errManagerMissing = errors.New("руководитель не найден или заблокирован")
+var errManagerSelf = errors.New("руководитель не может быть самим пользователем")
+var errManagerCycle = errors.New("руководитель не может быть подчинённым этого пользователя")
+
+// Subordinates — все активные подчинённые пользователя, в том числе подчинённые подчинённых.
+func (s *Store) Subordinates(ctx context.Context, id int64) ([]int64, error) {
+	return s.descendants(ctx, id, true)
+}
+
+// descendants обходит дерево руководитель → подчинённые; глубина ограничена на случай испорченных данных.
+func (s *Store) descendants(ctx context.Context, id int64, onlyActive bool) ([]int64, error) {
+	rows, err := s.pool.Query(ctx, `WITH RECURSIVE t(id, depth) AS (
+		SELECT id, 1 FROM users WHERE manager_id = $1 AND (active OR NOT $2::boolean)
+		UNION
+		SELECT u.id, t.depth + 1 FROM users u JOIN t ON u.manager_id = t.id WHERE (u.active OR NOT $2::boolean) AND t.depth < 20
+	) SELECT DISTINCT id FROM t`, id, onlyActive)
+	if err != nil {
+		return nil, err
+	}
+	out, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if out == nil {
+		out = []int64{}
+	}
+	return out, err
+}
+
+// checkManager: руководитель существует и активен, это не сам пользователь и не его подчинённый (иначе получится цикл).
+// userID == 0 — пользователь ещё не создан.
+func (s *Store) checkManager(ctx context.Context, userID, managerID int64) error {
+	var ok bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND active)`, managerID).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return errManagerMissing
+	}
+	if userID == 0 {
+		return nil
+	}
+	if managerID == userID {
+		return errManagerSelf
+	}
+	subs, err := s.descendants(ctx, userID, false)
+	if err != nil {
+		return err
+	}
+	for _, x := range subs {
+		if x == managerID {
+			return errManagerCycle
+		}
+	}
+	return nil
 }
 
 var ErrNoEmployee = errors.New("сотрудника с таким логином Jira нет в справочнике")
@@ -277,6 +342,11 @@ func (s *Store) Update(ctx context.Context, id int64, p UserPatch) (User, error)
 			return User{}, err
 		}
 	}
+	if p.ManagerID != nil && *p.ManagerID > 0 {
+		if err := s.checkManager(ctx, id, *p.ManagerID); err != nil {
+			return User{}, err
+		}
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return User{}, err
@@ -294,8 +364,10 @@ func (s *Store) Update(ctx context.Context, id int64, p UserPatch) (User, error)
 	u, err := scanUser(tx.QueryRow(ctx, `UPDATE users SET login = coalesce(nullif(trim($2), ''), login),
 		full_name = coalesce(nullif(trim($3), ''), full_name), role = coalesce($4, role), active = coalesce($5, active),
 		employee_id = CASE WHEN $6::text IS NULL THEN employee_id ELSE (SELECT id FROM employees WHERE jira_login = nullif(trim($6), '')) END,
-		modules = coalesce($7::text[], modules), updated_at = now() WHERE id = $1 RETURNING `+userCols,
-		id, p.Login, p.FullName, p.Role, p.Active, p.EmployeeLogin, mods))
+		modules = coalesce($7::text[], modules),
+		manager_id = CASE WHEN $8::bigint IS NULL THEN manager_id WHEN $8::bigint = 0 THEN NULL ELSE $8::bigint END,
+		updated_at = now() WHERE id = $1 RETURNING `+userCols,
+		id, p.Login, p.FullName, p.Role, p.Active, p.EmployeeLogin, mods, p.ManagerID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -380,7 +452,8 @@ func (s *Store) UserBySession(ctx context.Context, token string) (User, error) {
 		FROM users u WHERE s.token_hash = $1 AND s.expires_at > now() AND u.id = s.user_id AND u.active
 		RETURNING u.id, u.login, u.full_name, u.role, u.employee_id, u.active, u.created_at, u.last_login_at,
 		  (SELECT jira_login FROM employees e WHERE e.id = u.employee_id), u.modules,
-		  EXISTS (SELECT 1 FROM lead_projects lp WHERE lp.user_id = u.id)`, tokenHash(token)))
+		  EXISTS (SELECT 1 FROM lead_projects lp WHERE lp.user_id = u.id), u.manager_id,
+		  EXISTS (SELECT 1 FROM users sub WHERE sub.manager_id = u.id AND sub.active)`, tokenHash(token)))
 	return u, err
 }
 

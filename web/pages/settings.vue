@@ -2,7 +2,7 @@
 // Настройки: смена своего пароля (все), «Telegram: кто это?» (admin, hr), пользователи сервиса (только admin).
 import type { Me } from '~/composables/useMe'
 
-type User = Me & { active: boolean; created_at: string; last_login_at: string | null; employee_login: string | null }
+type User = Me & { active: boolean; created_at: string; last_login_at: string | null; employee_login: string | null; manager_id: number | null }
 
 const { apiBase } = useRuntimeConfig().public
 const { me } = useMe()
@@ -122,6 +122,8 @@ onMounted(loadLeadProjects)
 const lpForm = reactive({ lead: '', user_id: '' as number | '', project_key: '', title: '', position: 1, busy: false })
 // Кому можно назначить проект: активные пользователи; у назначенного без модуля «Контроль спринта» проект не будет виден.
 const lpUsers = computed(() => users.value.filter(u => u.active))
+// Подчинённые пользователя (прямые) — для подписи в таблице.
+const teamOf = (id: number) => users.value.filter(u => u.manager_id === id && u.active)
 const lpNoModule = (x: LeadProject) => { const u = users.value.find(u => u.id === x.user_id); return !!u && u.role !== 'admin' && !u.modules.includes('lead_control') }
 const lpLeads = computed(() => [...new Set(leadProjects.value.map(x => x.lead))])
 async function saveLeadProject(x?: LeadProject) {
@@ -160,7 +162,7 @@ async function copyIssued() {
 }
 
 const allModules = () => [...DEFAULT_MODULES]
-const form = reactive({ login: '', full_name: '', role: 'employee', employee_login: '', modules: allModules(), err: '', busy: false })
+const form = reactive({ login: '', full_name: '', role: 'employee', employee_login: '', manager_id: '' as number | '', modules: allModules(), err: '', busy: false })
 
 // Галочка модуля у существующего пользователя сохраняется сразу; админу доступны все модули всегда.
 function toggleModule(u: User, key: string, on: boolean) {
@@ -172,10 +174,10 @@ async function createUser() {
   form.err = ''; form.busy = true
   try {
     const r = await $fetch<{ user: User; password?: string }>(`${apiBase}/admin/users`, {
-      method: 'POST', body: { login: form.login, full_name: form.full_name, role: form.role, employee_login: form.employee_login, modules: form.modules },
+      method: 'POST', body: { login: form.login, full_name: form.full_name, role: form.role, employee_login: form.employee_login, modules: form.modules, manager_id: form.manager_id === '' ? null : form.manager_id },
     })
     issued.value = r.password ? { login: r.user.login, password: r.password } : null; copied.value = false
-    form.login = form.full_name = form.employee_login = ''; form.role = 'employee'; form.modules = allModules()
+    form.login = form.full_name = form.employee_login = ''; form.role = 'employee'; form.manager_id = ''; form.modules = allModules()
     await loadUsers()
   } catch (e) { form.err = errText(e) } finally { form.busy = false }
 }
@@ -196,7 +198,7 @@ async function saveEdit(u: User) {
   if (ok) editing.value = null
 }
 
-async function patchUser(u: User, body: Partial<Pick<User, 'role' | 'active' | 'full_name' | 'login' | 'modules'>> & { employee_login?: string }): Promise<boolean> {
+async function patchUser(u: User, body: Partial<Pick<User, 'role' | 'active' | 'full_name' | 'login' | 'modules'>> & { employee_login?: string; manager_id?: number }): Promise<boolean> {
   rowErr.value = { ...rowErr.value, [u.id]: '' }
   try {
     const nu = await $fetch<User>(`${apiBase}/admin/users/${u.id}`, { method: 'PATCH', body })
@@ -310,7 +312,7 @@ async function resetPassword(u: User) {
     <template v-if="isAdmin">
       <section class="card">
         <h2>Пользователи</h2>
-        <p class="lead">Кто может входить в сервис и какие модули шапки видит. Модуль нужно выдать галочкой, и при этом роль должна его допускать (например, «Спринты» недоступны HR). Администратору доступны все модули. Пользователями управляет только администратор.</p>
+        <p class="lead">Кто может входить в сервис и какие модули шапки видит. Руководитель пользователя (необязательно) видит в «Контроле спринта» всех своих подчинённых и их проекты. Модуль нужно выдать галочкой, и при этом роль должна его допускать (например, «Спринты» недоступны HR). Администратору доступны все модули. Пользователями управляет только администратор.</p>
 
         <div v-if="issued" class="issued" role="status">
           <div>Пароль для <b>{{ issued.login }}</b> — передайте его человеку лично. Больше он показан не будет.</div>
@@ -328,6 +330,12 @@ async function resetPassword(u: User) {
             </select>
           </label>
           <label>Логин в Jira <span class="sub">(необязательно)</span><input v-model="form.employee_login" autocomplete="off" placeholder="для связи с карточкой"></label>
+          <label>Руководитель <span class="sub">(необязательно)</span>
+            <select v-model="form.manager_id" aria-label="Руководитель нового пользователя">
+              <option value="">— нет —</option>
+              <option v-for="m in lpUsers" :key="m.id" :value="m.id">{{ m.full_name }} ({{ m.login }})</option>
+            </select>
+          </label>
           <fieldset class="mods">
             <legend>Модули в шапке</legend>
             <label v-for="m in MODULES" :key="m.key" class="chk"><input v-model="form.modules" type="checkbox" :value="m.key"> {{ m.title }}</label>
@@ -342,7 +350,7 @@ async function resetPassword(u: User) {
         <p v-if="listErr" class="form-error">{{ listErr }}</p>
         <div class="tbl">
           <table>
-            <thead><tr><th>Пользователь</th><th>Логин</th><th>Логин в Jira</th><th>Роль</th><th>Модули</th><th>Активен</th><th>Последний вход</th><th /></tr></thead>
+            <thead><tr><th>Пользователь</th><th>Логин</th><th>Логин в Jira</th><th>Роль</th><th>Руководитель</th><th>Модули</th><th>Активен</th><th>Последний вход</th><th /></tr></thead>
             <tbody>
               <tr v-for="u in users" :key="u.id" :class="{ inactive: !u.active }">
                 <template v-if="editing === u.id">
@@ -361,6 +369,14 @@ async function resetPassword(u: User) {
                   <select :value="u.role" :aria-label="`Роль ${u.full_name}`" @change="patchUser(u, { role: ($event.target as HTMLSelectElement).value as User['role'] })">
                     <option v-for="(t, r) in ROLE_TITLES" :key="r" :value="r">{{ t }}</option>
                   </select>
+                </td>
+                <td>
+                  <select :value="u.manager_id ?? ''" :aria-label="`Руководитель ${u.full_name}`"
+                    @change="patchUser(u, { manager_id: ($event.target as HTMLSelectElement).value === '' ? 0 : Number(($event.target as HTMLSelectElement).value) })">
+                    <option value="">нет</option>
+                    <option v-for="m in lpUsers.filter(x => x.id !== u.id)" :key="m.id" :value="m.id">{{ m.full_name }}</option>
+                  </select>
+                  <div v-if="teamOf(u.id).length" class="sub">подчинённых: {{ teamOf(u.id).length }}</div>
                 </td>
                 <td class="mods">
                   <label v-for="m in MODULES" :key="m.key" class="chk">
@@ -381,7 +397,7 @@ async function resetPassword(u: User) {
                   </template>
                 </td>
               </tr>
-              <tr v-if="!users.length"><td colspan="8" class="sub empty">Пользователей пока нет</td></tr>
+              <tr v-if="!users.length"><td colspan="9" class="sub empty">Пользователей пока нет</td></tr>
             </tbody>
           </table>
         </div>

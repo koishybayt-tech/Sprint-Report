@@ -127,7 +127,7 @@ func requireRole(roles ...string) func(http.Handler) http.Handler {
 func requireLeadAccess(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, _ := auth.FromContext(r.Context())
-		if u.Role == auth.RoleAdmin || u.Role == auth.RoleLead || u.HasProjects {
+		if u.Role == auth.RoleAdmin || u.Role == auth.RoleLead || u.HasProjects || u.HasTeam {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -198,7 +198,8 @@ func (h *authHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 		Role          string   `json:"role"`
 		Password      string   `json:"password"`
 		EmployeeLogin string   `json:"employee_login"`
-		Modules       []string `json:"modules"` // не указано — все модули
+		Modules       []string `json:"modules"`    // не указано — модули по умолчанию
+		ManagerID     *int64   `json:"manager_id"` // руководитель пользователя; не указано — без руководителя
 	}
 	if !readJSON(w, r, &req) {
 		return
@@ -207,7 +208,7 @@ func (h *authHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 	if generated {
 		req.Password = auth.GeneratePassword()
 	}
-	u, err := h.users.Create(r.Context(), req.Login, req.FullName, req.Role, req.Password, req.EmployeeLogin, req.Modules)
+	u, err := h.users.Create(r.Context(), req.Login, req.FullName, req.Role, req.Password, req.EmployeeLogin, req.Modules, req.ManagerID)
 	if err != nil {
 		h.userErr(w, "admin/users create", err)
 		return
@@ -235,11 +236,12 @@ func (h *authHandlers) updateUser(w http.ResponseWriter, r *http.Request) {
 		Active        *bool     `json:"active"`
 		EmployeeLogin *string   `json:"employee_login"` // "" — отвязать от сотрудника
 		Modules       *[]string `json:"modules"`
+		ManagerID     *int64    `json:"manager_id"` // 0 — убрать руководителя
 	}
 	if !readJSON(w, r, &req) {
 		return
 	}
-	u, err := h.users.Update(r.Context(), id, auth.UserPatch{Login: req.Login, FullName: req.FullName, Role: req.Role, Active: req.Active, EmployeeLogin: req.EmployeeLogin, Modules: req.Modules})
+	u, err := h.users.Update(r.Context(), id, auth.UserPatch{Login: req.Login, FullName: req.FullName, Role: req.Role, Active: req.Active, EmployeeLogin: req.EmployeeLogin, Modules: req.Modules, ManagerID: req.ManagerID})
 	if err != nil {
 		h.userErr(w, "admin/users update", err)
 		return
@@ -287,7 +289,7 @@ func (h *authHandlers) userErr(w http.ResponseWriter, what string, err error) {
 	case errors.Is(err, auth.ErrLoginTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	case errors.Is(err, auth.ErrWeakPassword), errors.Is(err, auth.ErrNoEmployee), strings.HasPrefix(err.Error(), "укажите"), strings.HasPrefix(err.Error(), "неизвестная роль"), strings.HasPrefix(err.Error(), "неизвестный модуль"),
-		strings.HasPrefix(err.Error(), "должен остаться"):
+		strings.HasPrefix(err.Error(), "должен остаться"), strings.HasPrefix(err.Error(), "руководитель "):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	default:
 		fail(w, h.log, what, err)
