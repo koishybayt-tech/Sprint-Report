@@ -59,7 +59,7 @@ async function mapAuthor(a: TgAuthor) {
 }
 
 // ---------- уведомления «Контроля спринта руководителей» (admin, lead) ----------
-type NotifySettings = { on_blocked: boolean; on_unblock: boolean; on_gap: boolean; telegram: { available: boolean; configured: boolean; connected: boolean; bot: string; link: string } }
+type NotifySettings = { on_blocked: boolean; on_unblock: boolean; on_gap: boolean; on_assigned: boolean; telegram: { available: boolean; configured: boolean; connected: boolean; bot: string; link: string } }
 const canNotify = computed(() => canSeeLeadControl(me.value))
 const ns = ref<NotifySettings | null>(null)
 const nsErr = ref('')
@@ -71,7 +71,7 @@ async function loadNotify() {
   try { ns.value = await $fetch<NotifySettings>(`${apiBase}/notifications/settings`); nsErr.value = '' } catch (e) { nsErr.value = errText(e) }
 }
 onMounted(loadNotify)
-async function saveFlag(f: 'on_blocked' | 'on_unblock' | 'on_gap', v: boolean) {
+async function saveFlag(f: 'on_blocked' | 'on_unblock' | 'on_gap' | 'on_assigned', v: boolean) {
   try { ns.value = await $fetch<NotifySettings>(`${apiBase}/notifications/settings`, { method: 'PUT', body: { [f]: v } }) } catch (e) { nsErr.value = errText(e) }
 }
 async function connectBot() {
@@ -83,7 +83,7 @@ async function connectBot() {
   } catch (e) { nsErr.value = errText(e) } finally { nsBusy.value = false }
 }
 // «Проверить уведомление» — пример выбранного события: в колокольчик всегда, в бота — если привязан.
-const testKind = ref<'blocked' | 'unblock' | 'gap'>('gap')
+const testKind = ref<'blocked' | 'unblock' | 'gap' | 'assigned'>('gap')
 const testBusy = ref(false)
 const TG_RESULT: Record<string, string> = {
   sent: 'и в ваш Telegram-бот', not_connected: 'в Telegram не отправлено — бот не подключён или не привязан',
@@ -247,6 +247,7 @@ async function resetPassword(u: User) {
         <label class="chk"><input type="checkbox" :checked="ns.on_blocked" @change="saveFlag('on_blocked', ($event.target as HTMLInputElement).checked)"> Задача попала в блок</label>
         <label class="chk"><input type="checkbox" :checked="ns.on_unblock" @change="saveFlag('on_unblock', ($event.target as HTMLInputElement).checked)"> Задачу можно вытащить из блока (всё, что она ждала, уже на тесте)</label>
         <label class="chk"><input type="checkbox" :checked="ns.on_gap" @change="saveFlag('on_gap', ($event.target as HTMLInputElement).checked)"> Задача завершилась без продолжения — создать продолжение или игнорировать</label>
+        <label class="chk"><input type="checkbox" :checked="ns.on_assigned" @change="saveFlag('on_assigned', ($event.target as HTMLInputElement).checked)"> Задачу назначили на меня — например, вернули мне (кроме тех, что я назначил сам)</label>
 
         <h3>Личный Telegram-бот</h3>
         <p v-if="!ns.telegram.available" class="sub">Недоступно: на сервере не задан ключ шифрования SECRETS_KEY (deploy/.env). Пока уведомления — только в колокольчике.</p>
@@ -275,6 +276,7 @@ async function resetPassword(u: User) {
             <option value="blocked">Задача попала в блок</option>
             <option value="unblock">Задачу можно вытащить из блока</option>
             <option value="gap">Задача завершилась без продолжения</option>
+            <option value="assigned">Задачу назначили на меня</option>
           </select>
           <button class="btn primary" type="button" :disabled="testBusy" @click="testNotify">{{ testBusy ? 'Отправляю…' : 'Проверить уведомление' }}</button>
         </div>

@@ -69,19 +69,20 @@ func notifySettings(nt *notify.Service, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { writeSettings(w, r, nt, log) }
 }
 
-// PUT /api/v1/notifications/settings {on_blocked?, on_unblock?, on_gap?}
+// PUT /api/v1/notifications/settings {on_blocked?, on_unblock?, on_gap?, on_assigned?}
 func notifySaveSettings(nt *notify.Service, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			OnBlocked *bool `json:"on_blocked"`
-			OnUnblock *bool `json:"on_unblock"`
-			OnGap     *bool `json:"on_gap"`
+			OnBlocked  *bool `json:"on_blocked"`
+			OnUnblock  *bool `json:"on_unblock"`
+			OnGap      *bool `json:"on_gap"`
+			OnAssigned *bool `json:"on_assigned"`
 		}
 		if !readJSON(w, r, &body) {
 			return
 		}
 		u, _ := auth.FromContext(r.Context())
-		if err := nt.SaveFlags(r.Context(), u.ID, body.OnBlocked, body.OnUnblock, body.OnGap); err != nil {
+		if err := nt.SaveFlags(r.Context(), u.ID, body.OnBlocked, body.OnUnblock, body.OnGap, body.OnAssigned); err != nil {
 			fail(w, log, "notifications settings", err)
 			return
 		}

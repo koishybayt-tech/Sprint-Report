@@ -1,7 +1,10 @@
 package notify
 
 import (
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/adata/reports/internal/leadcontrol"
 )
@@ -68,5 +71,50 @@ func TestLinkKeys(t *testing.T) {
 		if got := LinkKeys(c.in, jira); got != c.want {
 			t.Errorf("LinkKeys(%q)\n got  %s\n want %s", c.in, got, c.want)
 		}
+	}
+}
+
+func TestAssignedEvents(t *testing.T) {
+	at := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	rep := leadcontrol.Report{Lead: "Лид", Assigned: []leadcontrol.AssignedRow{
+		{Key: "AC-1", Summary: "Бэк - вход", From: "Иванов", By: "Петров", At: at},
+		{Key: "AC-2", Summary: "Дизайн", By: "", At: at},
+	}}
+	cur, ev := Current(rep)
+	if len(cur[KindAssigned]) != 2 || !cur[markerAssigned][""] {
+		t.Fatalf("состояние: %v", cur)
+	}
+	// первое назначение уже было, AC-2 — новое
+	prev := State{KindAssigned: {"AC-1@" + strconv.FormatInt(at.Unix(), 10): true}, markerAssigned: {"": true}}
+	got := Diff(prev, cur, ev)
+	if len(got) != 1 || got[0].Kind != KindAssigned || got[0].Key != "AC-2" {
+		t.Fatalf("события: %+v", got)
+	}
+	if !strings.Contains(got[0].Text, "AC-2 назначена на вас") || !strings.Contains(got[0].Text, "назначил: —") || strings.Contains(got[0].Text, "было:") {
+		t.Errorf("текст: %q", got[0].Text)
+	}
+	full := Diff(State{}, cur, ev)
+	for _, e := range full {
+		if e.Key == "AC-1" && !strings.Contains(e.Text, "было: Иванов, назначил: Петров") {
+			t.Errorf("текст AC-1: %q", e.Text)
+		}
+	}
+	// повторное назначение той же задачи (другое время) — новое событие
+	rep.Assigned[0].At = at.Add(time.Hour)
+	cur2, ev2 := Current(rep)
+	if d := Diff(cur, cur2, ev2); len(d) != 1 || d[0].Key != "AC-1" {
+		t.Errorf("повторное назначение: %+v", d)
+	}
+}
+
+func TestDropUnseen(t *testing.T) {
+	events := []Event{{Kind: KindBlocked, Key: "AC-1"}, {Kind: KindAssigned, Key: "AC-2"}, {Kind: KindGap, Key: "AC-3"}}
+	// по руководителю назначения ещё не фиксировались (метки нет) — их не рассылаем, остальное — как обычно
+	got := dropUnseen(State{KindBlocked: {}}, events)
+	if len(got) != 2 || got[0].Key != "AC-1" || got[1].Key != "AC-3" {
+		t.Errorf("без метки: %+v", got)
+	}
+	if got := dropUnseen(State{markerAssigned: {"": true}}, events); len(got) != 3 {
+		t.Errorf("с меткой: %+v", got)
 	}
 }

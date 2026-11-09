@@ -229,9 +229,14 @@ func hasProject(ps []leadcontrol.LeadProject, key string) bool {
 func filterProject(r leadcontrol.Report, p string) leadcontrol.Report {
 	keep := func(project string) bool { return project == p }
 	out := r
-	out.Totals, out.Sprints, out.Blocked, out.InWork, out.People, out.Gaps, out.Testing, out.Ignored =
+	out.Totals, out.Sprints, out.Blocked, out.InWork, out.People, out.Gaps, out.Testing, out.Ignored, out.Assigned =
 		[]leadcontrol.Totals{}, []leadcontrol.SprintRow{}, []leadcontrol.BlockedRow{}, []leadcontrol.InWorkRow{},
-		[]leadcontrol.PeopleRow{}, []leadcontrol.GapRow{}, []leadcontrol.TestingRow{}, []leadcontrol.IgnoredRow{}
+		[]leadcontrol.PeopleRow{}, []leadcontrol.GapRow{}, []leadcontrol.TestingRow{}, []leadcontrol.IgnoredRow{}, []leadcontrol.AssignedRow{}
+	for _, x := range r.Assigned {
+		if keep(x.Project) {
+			out.Assigned = append(out.Assigned, x)
+		}
+	}
 	for _, x := range r.Ignored {
 		if keep(x.Project) {
 			out.Ignored = append(out.Ignored, x)

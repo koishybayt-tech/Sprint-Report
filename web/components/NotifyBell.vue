@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Колокольчик: уведомления «Контроля спринта руководителей» (в блоке, можно снимать блок, без продолжения).
+// Колокольчик: уведомления «Контроля спринта руководителей» (в блоке, можно снимать блок, без продолжения, назначена на вас).
 // Опрос раз в минуту; список — последние 50, «Прочитать все».
 import { linkKeys } from '~/utils/leadcontrol'
 
@@ -33,7 +33,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('clic
 
 const when = (s: string) => new Date(s).toLocaleString('ru-RU', { timeZone: 'Asia/Almaty', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 const html = (n: N) => linkKeys(n.text, jiraBase)
-const ICON: Record<string, string> = { blocked: 'В блоке', unblock: 'Можно снимать блок', gap: 'Без продолжения', test: 'Тест' }
+const ICON: Record<string, string> = { blocked: 'В блоке', unblock: 'Можно снимать блок', gap: 'Без продолжения', assigned: 'Назначена на вас', test: 'Тест' }
 </script>
 
 <template>

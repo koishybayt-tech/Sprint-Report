@@ -406,3 +406,52 @@ func TestInWorkCountsFromTaken(t *testing.T) {
 		t.Errorf("без истории: %v, ждали nil", r.DaysSinceStart)
 	}
 }
+
+// asg — смена исполнителя: дни назад, ключи пользователей Jira (JIRAUSER…) «было» и «стало», логин автора.
+func asg(n float64, from, to, author string) Change {
+	return Change{At: ago(n), Field: "assignee", From: from, To: to, Author: author}
+}
+
+func TestAssigned(t *testing.T) {
+	mine := func(key string, created float64, status, curKey string, ch ...Change) *Issue {
+		is := iss(key, "Задача "+key, status, created, ch...)
+		is.Assignee, is.AssigneeKey = "Лид", curKey
+		return is
+	}
+	in := input(
+		mine("AC-1", 20, "В работе", "U-LEAD", asg(30, "", "U-IVAN", "petrov"), asg(1, "U-IVAN", "U-LEAD", "petrov")), // вернули руководителю — уведомлять
+		mine("AC-2", 20, "В работе", "U-LEAD", asg(0.5, "U-IVAN", "U-LEAD", "lead")),                                  // назначил сам себе — нет
+		mine("AC-3", 20, "В работе", "U-LEAD", asg(4, "U-IVAN", "U-LEAD", "petrov")),                                  // старше 3 суток — нет
+		mine("AC-4", 20, "В работе", "U-OTHER", asg(1, "U-IVAN", "U-LEAD", "petrov")),                                 // потом исполнителя сменили — нет
+		mine("AC-5", 20, "Готово", "U-LEAD", asg(1, "U-IVAN", "U-LEAD", "petrov")),                                    // задача закрыта — нет
+		mine("AC-6", 20, "Сделать", "U-LEAD"),                                                                         // назначена при создании, истории нет — нет
+		mine("AC-7", 20, "В работе", "U-LEAD", asg(2, "", "U-LEAD", "petrov")),                                        // назначили на неназначенную — да, «было» пусто
+	)
+	in.Names["lead"] = "Лид"
+	in.KeyNames = map[string]string{"U-IVAN": "Иванов"}
+	// чужой проект и чужой исполнитель
+	other := iss("ADTC-1", "Чужой проект", "В работе", 20, asg(1, "U-IVAN", "U-LEAD", "petrov"))
+	other.Project, other.Assignee, other.AssigneeKey = "ADTC", "Лид", "U-LEAD"
+	in.Issues[other.Key] = other
+	notMine := iss("AC-8", "Не руководитель", "В работе", 20, asg(1, "U-LEAD", "U-IVAN", "petrov"))
+	notMine.Assignee, notMine.AssigneeKey = "Иванов", "U-IVAN"
+	in.Issues[notMine.Key] = notMine
+
+	got := Assigned(in)
+	keys := []string{}
+	for _, r := range got {
+		keys = append(keys, r.Key)
+	}
+	if len(keys) != 2 || keys[0] != "AC-1" || keys[1] != "AC-7" { // новые сверху
+		t.Fatalf("задачи: %v, ждали [AC-1 AC-7]", keys)
+	}
+	if got[0].From != "Иванов" || got[0].By != "Петров" {
+		t.Errorf("AC-1: было %q, назначил %q", got[0].From, got[0].By)
+	}
+	if got[1].From != "" {
+		t.Errorf("AC-7: «было» должно быть пусто, а не %q", got[1].From)
+	}
+	if rep := Build(in, now); len(rep.Assigned) != 2 {
+		t.Errorf("Build: назначений %d, ждали 2", len(rep.Assigned))
+	}
+}

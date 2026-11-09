@@ -36,6 +36,7 @@ type Issue struct {
 	Key, Project, Summary, Type string
 	Status                      string // название статуса
 	Assignee                    string // отображаемое имя ("" — не назначена)
+	AssigneeKey                 string // ключ исполнителя в Jira (JIRAUSER…): так исполнитель записан в истории
 	Tester                      string // «Тестировщик» (customfield_10902), отображаемое имя
 	Position                    string // «Позиция разработчика» (customfield_11101)
 	Created                     time.Time
@@ -63,7 +64,9 @@ type Input struct {
 	LeadOf map[string]string
 	Issues map[string]*Issue
 	Names  map[string]string // логин → отображаемое имя
-	Roles  map[string]string // отображаемое имя → должность человека (самая частая по задачам или из справочника)
+	// KeyNames — ключ пользователя Jira (JIRAUSER…) → имя: для «было»/«стало» в смене исполнителя.
+	KeyNames map[string]string
+	Roles    map[string]string // отображаемое имя → должность человека (самая частая по задачам или из справочника)
 	// Ignored — «Игнорировать» в разрывах: продолжение не нужно (ключ задачи → кто и когда скрыл).
 	Ignored  map[string]Ignore
 	JiraBase string // для ссылок «Создать продолжение»

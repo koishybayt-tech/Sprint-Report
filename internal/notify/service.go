@@ -49,7 +49,7 @@ func (s *Service) Process(ctx context.Context, reports map[string]leadcontrol.Re
 		if !seen {
 			continue
 		}
-		events := Diff(prev, cur, ev)
+		events := dropUnseen(prev, Diff(prev, cur, ev))
 		if len(events) == 0 {
 			continue
 		}
@@ -108,10 +108,10 @@ func (s *Service) saveState(ctx context.Context, lead string, cur State) error {
 }
 
 type recipient struct {
-	userID                      int64
-	onBlocked, onUnblock, onGap bool
-	tokenEnc                    []byte
-	chatID                      *int64
+	userID                                  int64
+	onBlocked, onUnblock, onGap, onAssigned bool
+	tokenEnc                                []byte
+	chatID                                  *int64
 }
 
 func (r recipient) wants(kind string) bool {
@@ -122,6 +122,8 @@ func (r recipient) wants(kind string) bool {
 		return r.onUnblock
 	case KindGap:
 		return r.onGap
+	case KindAssigned:
+		return r.onAssigned
 	}
 	return true
 }
@@ -129,7 +131,7 @@ func (r recipient) wants(kind string) bool {
 // recipients — активные пользователи: admin/lead, связанные с сотрудником-руководителем, и те, кому назначены его проекты
 // (lead_projects.user_id); без настроек — все события.
 func (s *Service) recipients(ctx context.Context, lead string) ([]recipient, error) {
-	rows, err := s.pool.Query(ctx, `SELECT u.id, coalesce(n.on_blocked, true), coalesce(n.on_unblock, true), coalesce(n.on_gap, true),
+	rows, err := s.pool.Query(ctx, `SELECT u.id, coalesce(n.on_blocked, true), coalesce(n.on_unblock, true), coalesce(n.on_gap, true), coalesce(n.on_assigned, true),
 			n.tg_token_enc, n.tg_chat_id
 		FROM users u LEFT JOIN employees e ON e.id = u.employee_id LEFT JOIN notify_settings n ON n.user_id = u.id
 		WHERE u.active AND ((e.full_name = $1 AND u.role IN ('admin', 'lead'))
@@ -141,7 +143,7 @@ func (s *Service) recipients(ctx context.Context, lead string) ([]recipient, err
 	var out []recipient
 	for rows.Next() {
 		var r recipient
-		if err := rows.Scan(&r.userID, &r.onBlocked, &r.onUnblock, &r.onGap, &r.tokenEnc, &r.chatID); err != nil {
+		if err := rows.Scan(&r.userID, &r.onBlocked, &r.onUnblock, &r.onGap, &r.onAssigned, &r.tokenEnc, &r.chatID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -263,19 +265,20 @@ type TelegramState struct {
 }
 
 type Settings struct {
-	OnBlocked bool          `json:"on_blocked"`
-	OnUnblock bool          `json:"on_unblock"`
-	OnGap     bool          `json:"on_gap"`
-	Telegram  TelegramState `json:"telegram"`
+	OnBlocked  bool          `json:"on_blocked"`
+	OnUnblock  bool          `json:"on_unblock"`
+	OnGap      bool          `json:"on_gap"`
+	OnAssigned bool          `json:"on_assigned"`
+	Telegram   TelegramState `json:"telegram"`
 }
 
 func (s *Service) Settings(ctx context.Context, userID int64) (Settings, error) {
-	st := Settings{OnBlocked: true, OnUnblock: true, OnGap: true, Telegram: TelegramState{Available: s.box != nil}}
+	st := Settings{OnBlocked: true, OnUnblock: true, OnGap: true, OnAssigned: true, Telegram: TelegramState{Available: s.box != nil}}
 	var tok []byte
 	var bot, code *string
 	var chat *int64
-	err := s.pool.QueryRow(ctx, `SELECT on_blocked, on_unblock, on_gap, tg_token_enc, tg_bot, tg_chat_id, tg_link_code
-		FROM notify_settings WHERE user_id = $1`, userID).Scan(&st.OnBlocked, &st.OnUnblock, &st.OnGap, &tok, &bot, &chat, &code)
+	err := s.pool.QueryRow(ctx, `SELECT on_blocked, on_unblock, on_gap, on_assigned, tg_token_enc, tg_bot, tg_chat_id, tg_link_code
+		FROM notify_settings WHERE user_id = $1`, userID).Scan(&st.OnBlocked, &st.OnUnblock, &st.OnGap, &st.OnAssigned, &tok, &bot, &chat, &code)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return st, nil
 	}
@@ -293,12 +296,13 @@ func (s *Service) Settings(ctx context.Context, userID int64) (Settings, error) 
 	return st, nil
 }
 
-func (s *Service) SaveFlags(ctx context.Context, userID int64, blocked, unblock, gap *bool) error {
-	_, err := s.pool.Exec(ctx, `INSERT INTO notify_settings (user_id, on_blocked, on_unblock, on_gap)
-		VALUES ($1, coalesce($2, true), coalesce($3, true), coalesce($4, true))
+func (s *Service) SaveFlags(ctx context.Context, userID int64, blocked, unblock, gap, assigned *bool) error {
+	_, err := s.pool.Exec(ctx, `INSERT INTO notify_settings (user_id, on_blocked, on_unblock, on_gap, on_assigned)
+		VALUES ($1, coalesce($2, true), coalesce($3, true), coalesce($4, true), coalesce($5, true))
 		ON CONFLICT (user_id) DO UPDATE SET on_blocked = coalesce($2, notify_settings.on_blocked),
-		  on_unblock = coalesce($3, notify_settings.on_unblock), on_gap = coalesce($4, notify_settings.on_gap), updated_at = now()`,
-		userID, blocked, unblock, gap)
+		  on_unblock = coalesce($3, notify_settings.on_unblock), on_gap = coalesce($4, notify_settings.on_gap),
+		  on_assigned = coalesce($5, notify_settings.on_assigned), updated_at = now()`,
+		userID, blocked, unblock, gap, assigned)
 	return err
 }
 
@@ -347,12 +351,13 @@ type TestResult struct {
 
 // testSamples — как выглядят события каждого вида (текст как у настоящих, с пометкой «тест»).
 var testSamples = map[string]string{
-	KindBlocked: "🔒 ТЕСТ-1 попала в блок · Иванов Иван · Так будет выглядеть уведомление о задаче в Blocked",
-	KindUnblock: "🔓 ТЕСТ-2 можно вытащить из блока: можно снимать блок · с сегодня · Всё, что задача ждала, уже на тесте",
-	KindGap:     "➡️ ТЕСТ-3 завершилась без продолжения (нет фронта, приоритет «Высокий»): Дизайн готов: задачи на фронт нет · Пример задачи",
+	KindBlocked:  "🔒 ТЕСТ-1 попала в блок · Иванов Иван · Так будет выглядеть уведомление о задаче в Blocked",
+	KindUnblock:  "🔓 ТЕСТ-2 можно вытащить из блока: можно снимать блок · с сегодня · Всё, что задача ждала, уже на тесте",
+	KindGap:      "➡️ ТЕСТ-3 завершилась без продолжения (нет фронта, приоритет «Высокий»): Дизайн готов: задачи на фронт нет · Пример задачи",
+	KindAssigned: "👤 ТЕСТ-4 назначена на вас (было: Иванов Иван, назначил: Петров Пётр) · Так будет выглядеть уведомление, когда задачу вернули вам",
 }
 
-// Test — пример события выбранного вида (blocked | unblock | gap, пусто — общий): в колокольчик всегда,
+// Test — пример события выбранного вида (blocked | unblock | gap | assigned, пусто — общий): в колокольчик всегда,
 // в личный бот — если он привязан, с теми же кнопками, что у настоящего события.
 func (s *Service) Test(ctx context.Context, userID int64, kind string) (TestResult, error) {
 	text, ok := testSamples[kind]
@@ -378,7 +383,7 @@ func (s *Service) Test(ctx context.Context, userID int64, kind string) (TestResu
 	}
 	var btn []Button
 	switch kind {
-	case KindBlocked, KindUnblock:
+	case KindBlocked, KindUnblock, KindAssigned:
 		btn = []Button{{Text: "Открыть в Jira", URL: s.jiraBase}}
 	case KindGap:
 		btn = []Button{{Text: "Создать продолжение", URL: s.jiraBase + "/secure/CreateIssueDetails!init.jspa"}, {Text: "Игнорировать", Data: "test"}}

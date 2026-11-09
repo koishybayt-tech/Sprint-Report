@@ -34,15 +34,16 @@ func LeadControlLeads(ctx context.Context, pool *pgxpool.Pool) ([]string, map[st
 
 // leadControlData — общее для всех руководителей: задачи года и открытых/будущих спринтов с историей и связями.
 type leadControlData struct {
-	issues  map[string]*leadcontrol.Issue
-	names   map[string]string
-	roles   map[string]string
-	leadOf  map[string]string
-	ignored map[string]map[string]leadcontrol.Ignore // руководитель → скрытые из «Разрывов»
+	issues   map[string]*leadcontrol.Issue
+	names    map[string]string
+	roles    map[string]string
+	leadOf   map[string]string
+	keyNames map[string]string                        // ключ пользователя Jira → имя (по исполнителям задач)
+	ignored  map[string]map[string]leadcontrol.Ignore // руководитель → скрытые из «Разрывов»
 }
 
 func loadLeadControlData(ctx context.Context, pool *pgxpool.Pool, leads map[string][]leadcontrol.LeadProject) (*leadControlData, error) {
-	d := &leadControlData{issues: map[string]*leadcontrol.Issue{}, roles: map[string]string{}, leadOf: map[string]string{},
+	d := &leadControlData{issues: map[string]*leadcontrol.Issue{}, roles: map[string]string{}, leadOf: map[string]string{}, keyNames: map[string]string{},
 		ignored: map[string]map[string]leadcontrol.Ignore{}}
 	var err error
 	if d.names, err = JiraNames(ctx, pool); err != nil {
@@ -71,7 +72,8 @@ func loadLeadControlData(ctx context.Context, pool *pgxpool.Pool, leads map[stri
 	const scope = `(updated >= date_trunc('year', now() AT TIME ZONE 'Asia/Almaty') AT TIME ZONE 'Asia/Almaty' OR in_open_sprints OR in_future_sprints)`
 	rows, err := pool.Query(ctx, `SELECT key, project_key, coalesce(summary, ''), coalesce(type, ''), coalesce(status_name, ''),
 			coalesce(assignee, ''), coalesce(tester, ''), coalesce(position, ''), created, sprint_ids, in_open_sprints, in_future_sprints,
-			coalesce(raw->'fields'->'project'->>'id', ''), coalesce(raw->'fields'->'issuetype'->>'id', '')
+			coalesce(raw->'fields'->'project'->>'id', ''), coalesce(raw->'fields'->'issuetype'->>'id', ''),
+			coalesce(raw->'fields'->'assignee'->>'key', '')
 		FROM jira_issues WHERE `+scope)
 	if err != nil {
 		return nil, err
@@ -81,7 +83,7 @@ func loadLeadControlData(ctx context.Context, pool *pgxpool.Pool, leads map[stri
 		is := &leadcontrol.Issue{}
 		var ids []int64
 		if err := rows.Scan(&is.Key, &is.Project, &is.Summary, &is.Type, &is.Status, &is.Assignee, &is.Tester, &is.Position,
-			&is.Created, &ids, &is.InOpenSprint, &is.InFutureSprint, &is.ProjectID, &is.TypeID); err != nil {
+			&is.Created, &ids, &is.InOpenSprint, &is.InFutureSprint, &is.ProjectID, &is.TypeID, &is.AssigneeKey); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -91,6 +93,9 @@ func loadLeadControlData(ctx context.Context, pool *pgxpool.Pool, leads map[stri
 			}
 		}
 		d.issues[is.Key] = is
+		if is.AssigneeKey != "" && is.Assignee != "" {
+			d.keyNames[is.AssigneeKey] = is.Assignee
+		}
 		if is.Assignee != "" && is.Position != "" {
 			if posCount[is.Assignee] == nil {
 				posCount[is.Assignee] = map[string]int{}
@@ -273,7 +278,7 @@ func BuildLeadControl(ctx context.Context, pool *pgxpool.Pool, leads []string, b
 	}
 	out := map[string]leadcontrol.Report{}
 	for _, lead := range leads {
-		in := &leadcontrol.Input{Now: now, Lead: lead, Projects: by[lead], LeadOf: d.leadOf, Issues: d.issues, Names: d.names, Roles: d.roles,
+		in := &leadcontrol.Input{Now: now, Lead: lead, Projects: by[lead], LeadOf: d.leadOf, Issues: d.issues, Names: d.names, KeyNames: d.keyNames, Roles: d.roles,
 			Ignored: d.ignored[lead], JiraBase: jiraBase}
 		out[lead] = leadcontrol.Build(in, at)
 	}

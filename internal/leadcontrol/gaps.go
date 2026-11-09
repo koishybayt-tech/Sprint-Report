@@ -290,6 +290,7 @@ type Report struct {
 	Gaps      []GapRow      `json:"gaps"`
 	Testing   []TestingRow  `json:"testing"`
 	Ignored   []IgnoredRow  `json:"ignored"`
+	Assigned  []AssignedRow `json:"-"` // назначенные на самого руководителя за 3 дня: только для уведомлений (считается в памяти, в API и в сохранённый расчёт не попадает)
 }
 
 // IgnoredOf — скрытые задачи руководителя (по проектам руководителя), новые сверху.
@@ -410,7 +411,7 @@ func TotalsOf(in *Input, rep *Report) []Totals {
 func Build(in *Input, updatedAt time.Time) Report {
 	rep := Report{UpdatedAt: updatedAt, Lead: in.Lead, Projects: in.Projects,
 		Blocked: Blocked(in), InWork: InWork(in), People: People(in), Gaps: Gaps(in), Testing: Testing(in), Sprints: Sprints(in, updatedAt),
-		Ignored: IgnoredOf(in)}
+		Ignored: IgnoredOf(in), Assigned: Assigned(in)}
 	rep.Totals = TotalsOf(in, &rep)
 	if rep.Projects == nil {
 		rep.Projects = []LeadProject{}
