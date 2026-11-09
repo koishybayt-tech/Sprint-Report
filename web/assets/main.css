@@ -159,7 +159,10 @@ td select{font-size:13px;padding:4px 8px}
 .page-wide td.actions>*{display:inline-block;margin:0 10px 4px 0}
 .page-wide td.mods{min-width:0}
 .page-wide td input,.page-wide td select{max-width:100%;min-width:0}
-@media (max-width:900px){.page-wide .tbl{overflow-x:auto}}
+/* Без собственной прокрутки <th> липнет к окну сам (sticky) — сдвиг из sticky-heads не нужен, иначе шапка уезжает вниз таблицы */
+.page-wide .tbl thead th{transform:none}
+/* На узких экранах таблица снова в своей прокрутке: заголовок ведёт sticky-heads, как в остальных отчётах */
+@media (max-width:900px){.page-wide .tbl{overflow-x:auto}.page-wide .tbl thead th{transform:translateY(var(--head-shift,0px))}}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .card h2{margin:0}
 .form-grid{display:grid;gap:10px;max-width:420px}
