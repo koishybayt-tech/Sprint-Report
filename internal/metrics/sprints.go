@@ -86,6 +86,39 @@ type ProjectSprint struct {
 	ReadyPct    int         `json:"ready_pct"`
 	TimePct     int         `json:"time_pct"`
 	OldestOpen  *OldestOpen `json:"oldest_open"`
+	// CreatedDaily — задачи, созданные после старта спринта, по дням (поток новых и внеплановых задач); nil — у проекта нет спринта.
+	CreatedDaily *CreatedDaily `json:"created_daily"`
+}
+
+// CreatedDaily — ряд по календарным дням (Алматы) от начала спринта: сколько задач, лежащих сейчас в спринте, создано в этот день.
+type CreatedDaily struct {
+	From      string `json:"from"`      // дата первого дня ряда (YYYY-MM-DD)
+	Total     []int  `json:"total"`     // создано задач
+	Unplanned []int  `json:"unplanned"` // из них внеплановых (поле «План» = «Внеплановая»)
+}
+
+// maxCreatedDays — длиннее ряд не строим (просроченный спринт): берём последние дни.
+const maxCreatedDays = 62
+
+// createdDaily собирает ряд от start до min(сегодня, конец спринта), но не короче последнего дня с созданной задачей.
+func createdDaily(start, end string, today time.Time, created map[int][2]int, maxIdx int) *CreatedDaily {
+	if start == "" {
+		return nil
+	}
+	st := dateNoon(start)
+	idx := func(t time.Time) int { return int(math.Round(t.Sub(st).Hours() / 24)) }
+	last := idx(today)
+	if end != "" {
+		last = min(last, idx(dateNoon(end)))
+	}
+	last = max(last, maxIdx, 0)
+	first := max(0, last-maxCreatedDays+1)
+	cd := &CreatedDaily{From: st.AddDate(0, 0, first).Format("2006-01-02"), Total: make([]int, last-first+1), Unplanned: make([]int, last-first+1)}
+	for i := first; i <= last; i++ {
+		c := created[i]
+		cd.Total[i-first], cd.Unplanned[i-first] = c[0], c[1]
+	}
+	return cd
 }
 
 var readyDeployRe = regexp.MustCompile(`Ready for deploy|In Staging`)
@@ -111,6 +144,9 @@ func ProjectSprints(issues []Issue, leads map[string]string, asOf time.Time) []P
 		hours  float64
 		oldAge int
 		start  *time.Time
+		// created — задачи, созданные после старта спринта: индекс дня от начала спринта → [всего, внеплановых]
+		created map[int][2]int
+		maxIdx  int
 	}
 	byKey := map[string]*acc{}
 	var order []string
@@ -127,7 +163,7 @@ func ProjectSprints(issues []Issue, leads map[string]string, asOf time.Time) []P
 			if lead == "" {
 				lead = "—"
 			}
-			a = &acc{p: ProjectSprint{Key: f.ProjectKey, Name: f.ProjectName, Lead: lead}, ppl: map[string]bool{}, oldAge: -1}
+			a = &acc{p: ProjectSprint{Key: f.ProjectKey, Name: f.ProjectName, Lead: lead}, ppl: map[string]bool{}, oldAge: -1, created: map[int][2]int{}}
 			if active != nil {
 				a.p.Sprint = active.Name
 				a.p.Start = dateOf(active.Start)
@@ -171,6 +207,18 @@ func ProjectSprints(issues []Issue, leads map[string]string, asOf time.Time) []P
 		}
 		if active != nil && active.Start != nil && f.Created.After(*active.Start) {
 			p.Added++
+			if p.Start != "" {
+				i := int(math.Round(noon(f.Created.In(Almaty)).Sub(dateNoon(p.Start)).Hours() / 24))
+				if i >= 0 {
+					c := a.created[i]
+					c[0]++
+					if f.Plan == "Внеплановая" {
+						c[1]++
+					}
+					a.created[i] = c
+					a.maxIdx = max(a.maxIdx, i)
+				}
+			}
 		}
 		if f.Plan == "Внеплановая" {
 			p.Unplanned++
@@ -209,6 +257,7 @@ func ProjectSprints(issues []Issue, leads map[string]string, asOf time.Time) []P
 			p.LeftDays = &left
 		}
 		p.TimePct = timePct(p.Start, p.End, today)
+		p.CreatedDaily = createdDaily(p.Start, p.End, today, a.created, a.maxIdx)
 		out = append(out, p)
 	}
 	return out

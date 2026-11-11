@@ -105,3 +105,62 @@ func TestPickNext(t *testing.T) {
 		t.Error("без будущих спринтов ждали nil")
 	}
 }
+
+func TestCreatedDaily(t *testing.T) {
+	active := Sprint{ID: 10, Name: "ABC 2026-19", State: "ACTIVE", Start: ptr(at("2026-10-26 09:00")), End: ptr(at("2026-11-06 18:00"))}
+	mk := func(key, created, plan string) Issue {
+		return Issue{Key: key, ProjectKey: "ABC", StatusID: "10100", StatusName: "Сделать", Plan: plan, Created: at(created), Updated: at(created), Sprints: []Sprint{active}}
+	}
+	issues := []Issue{
+		mk("ABC-1", "2026-10-20 10:00", ""),            // создана до старта — в поток не входит
+		mk("ABC-2", "2026-10-28 11:00", "Внеплановая"), // день 2
+		mk("ABC-3", "2026-10-28 16:30", ""),            // день 2
+		mk("ABC-4", "2026-10-30 09:30", "Внеплановая"), // день 4
+		mk("ABC-5", "2026-10-26 10:00", ""),            // день 0 (в день старта, после старта)
+		mk("ABC-6", "2026-10-26 08:00", ""),            // до старта в тот же день — в поток не входит
+		mk("ABC-7", "2026-10-28 23:50", "Внеплановая"), // день 2, поздний вечер по Алматы
+	}
+	p := ProjectSprints(issues, nil, at("2026-11-02 10:30"))[0]
+	cd := p.CreatedDaily
+	if cd == nil || cd.From != "2026-10-26" || len(cd.Total) != 8 { // с 26.10 по 02.11 включительно
+		t.Fatalf("ряд: %+v", cd)
+	}
+	wantTotal := []int{1, 0, 3, 0, 1, 0, 0, 0}
+	wantUnpl := []int{0, 0, 2, 0, 1, 0, 0, 0}
+	for i := range wantTotal {
+		if cd.Total[i] != wantTotal[i] || cd.Unplanned[i] != wantUnpl[i] {
+			t.Errorf("день %d: создано %d (внепл. %d), ждали %d (%d)", i, cd.Total[i], cd.Unplanned[i], wantTotal[i], wantUnpl[i])
+		}
+	}
+	sum := 0
+	for _, n := range cd.Total {
+		sum += n
+	}
+	if sum != p.Added {
+		t.Errorf("сумма ряда %d не равна «добавлено после старта» %d", sum, p.Added)
+	}
+
+	// просроченный спринт: ряд кончается на дате окончания, а созданная позже задача его продлевает
+	late := append([]Issue{}, issues...)
+	over := ProjectSprints(late, nil, at("2026-12-20 10:00"))[0].CreatedDaily
+	if len(over.Total) != 12 { // до 06.11 включительно
+		t.Errorf("просроченный спринт: %d дней, ждали 12", len(over.Total))
+	}
+	late = append(late, mk("ABC-8", "2026-11-10 10:00", ""))
+	over = ProjectSprints(late, nil, at("2026-12-20 10:00"))[0].CreatedDaily
+	if len(over.Total) != 16 || over.Total[15] != 1 { // день 15 = 10.11
+		t.Errorf("созданная после окончания: %d дней, последний день %v", len(over.Total), over.Total)
+	}
+
+	// длинный просроченный спринт не раздувает ряд
+	long := []Issue{mk("ABC-9", "2027-03-01 10:00", "")}
+	if n := len(ProjectSprints(long, nil, at("2027-03-05 10:00"))[0].CreatedDaily.Total); n != maxCreatedDays {
+		t.Errorf("ряд %d дней, ждали не больше %d", n, maxCreatedDays)
+	}
+
+	// нет спринта у проекта — нет ряда
+	none := []Issue{{Key: "ABC-1", ProjectKey: "ABC", StatusID: "10100", Created: at("2026-10-20 10:00"), Updated: at("2026-10-20 10:00")}}
+	if got := ProjectSprints(none, nil, at("2026-11-02 10:30"))[0].CreatedDaily; got != nil {
+		t.Errorf("без спринта ряд должен быть nil: %+v", got)
+	}
+}

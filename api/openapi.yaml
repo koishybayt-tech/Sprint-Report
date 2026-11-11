@@ -521,6 +521,14 @@ components:
         ready_pct: { type: integer }
         time_pct: { type: integer }
         oldest_open: { type: object, properties: { key: { type: string }, age_days: { type: integer } } }
+        created_daily:
+          type: object
+          nullable: true
+          description: "задачи, созданные после старта спринта, по календарным дням (Алматы): ряд от from; внеплановые — поле «План» = «Внеплановая»"
+          properties:
+            from: { type: string, format: date }
+            total: { type: array, items: { type: integer } }
+            unplanned: { type: array, items: { type: integer } }
     SprintDay:
       type: object
       properties:

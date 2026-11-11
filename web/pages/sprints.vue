@@ -3,6 +3,7 @@
 // Вкладки по людям и «Отсутствия» — в components/SprintsPeople.vue.
 import { type ApiReport, type Col, type P, UNASSIGNED, buildModel, esc, fmt, jiraLinks, lvl, pct, sumOf } from '~/utils/sprints'
 import { defaultCtl, peopleLogic, switchTip } from '~/utils/sprintsPeople'
+import { barPct, flowOf } from '~/utils/flow'
 
 const { apiBase, jiraBase } = useRuntimeConfig().public
 const route = useRoute()
@@ -207,6 +208,11 @@ const stabCols: Col<P>[] = [
   { h: 'Внеплановые', v: p => p.unpl, num: true },
   { h: 'Без обновлений >14 дн.', v: p => p.stale, num: true, f: p => `<span class="${lvl(p.stale, 3, 10)}">${p.stale}</span>` },
 ]
+// Динамика созданных задач: проекты с новыми задачами после старта — по убыванию потока, остальные — списком.
+const flows = computed(() => scopedP.value.map(p => ({ p, f: flowOf(p.cd) })).filter(x => x.f && x.f.total > 0)
+  .sort((a, b) => b.f!.total - a.f!.total || b.f!.unplanned - a.f!.unplanned || a.p.k.localeCompare(b.p.k)) as { p: P; f: NonNullable<ReturnType<typeof flowOf>> }[])
+const noFlow = computed(() => scopedP.value.filter(p => !flows.value.some(x => x.p.k === p.k)).map(p => p.k))
+const flowTitle = (d: { date: string; n: number; u: number }) => `${fmt(d.date)}: создано ${d.n}${d.u ? `, внеплановых ${d.u}` : ''}`
 const qualCols = computed<Col<P>[]>(() => {
   const { jq, nl, ST } = L.value
   return [
@@ -381,6 +387,28 @@ const notes = computed(() => {
         <h2>Стабильность спринтов</h2>
         <p class="lead">Сколько задач перенесено из прошлых спринтов, сколько создано после старта текущего и сколько помечено внеплановыми.</p>
         <SortTable :cols="stabCols" :rows="scopedP" :init="[4, 'desc']" />
+
+        <h2>Динамика созданных задач в спринте</h2>
+        <p class="lead">Сколько задач создано в каждый день текущего спринта после его старта — по каждому проекту: видно, когда в спринт «прилетало» много новых задач. Красным — внеплановые (поле «План» = «Внеплановая»), светлый фон — выходные. Считаются задачи, которые сейчас лежат в спринте; наведите на колонку, чтобы увидеть день.</p>
+        <div v-if="flows.length" class="flow">
+          <article v-for="x in flows" :key="x.p.k" class="flow-card">
+            <header><b>{{ x.p.k }}</b><span class="sub">{{ x.p.n }} · {{ x.p.sp }}</span></header>
+            <div class="flow-nums">
+              <span><b>{{ x.f.total }}</b> создано</span>
+              <span :class="lvl(pct(x.f.unplanned, x.f.total), 30, 60)">внеплановых <b>{{ x.f.unplanned }}</b> ({{ pct(x.f.unplanned, x.f.total) }}%)</span>
+              <span v-if="x.f.peak">пик {{ fmt(x.f.peak.date) }}: <b>{{ x.f.peak.n }}</b></span>
+            </div>
+            <div class="flow-bars" role="img" :aria-label="`${x.p.k}: создано ${x.f.total} задач, внеплановых ${x.f.unplanned}`">
+              <div v-for="d in x.f.days" :key="d.date" class="flow-col" :class="{ we: d.weekend }" :title="flowTitle(d)">
+                <i v-if="d.n - d.u" class="pl" :style="{ height: barPct(d.n - d.u, x.f.max) + '%' }" />
+                <i v-if="d.u" class="un" :style="{ height: barPct(d.u, x.f.max) + '%' }" />
+              </div>
+            </div>
+            <div class="flow-axis"><span>{{ fmt(x.f.days[0].date) }}</span><span>{{ fmt(x.f.days[x.f.days.length - 1].date) }}</span></div>
+          </article>
+        </div>
+        <p v-else class="sub">Новых задач после старта спринтов нет.</p>
+        <p v-if="flows.length && noFlow.length" class="sub">Без новых задач после старта: {{ noFlow.join(', ') }}.</p>
       </section>
 
       <section v-else-if="tab === 'qual'">

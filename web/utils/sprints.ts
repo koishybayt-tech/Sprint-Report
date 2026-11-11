@@ -1,12 +1,15 @@
 // Модель отчёта «Спринты» на клиенте: данные из /api/v1/sprints/report, приведённые к именам
 // reference/sprints/page_template.html, чтобы формулы и колонки вкладок переносились 1-в-1.
 
+import type { CreatedDaily } from './flow'
+
 export type ApiProject = {
   key: string; name: string; lead: string; sprint: string; start?: string; end?: string; left_days: number | null
   total: number; todo: number; wk: number; cr: number; rw: number; ts: number; dn: number; bug: number
   carry: number; carry_open: number; added: number; unplanned: number; blocked: number; stale: number
   hours: number; people: number; ready_deploy: number; in_test: number; ready_pct: number; time_pct: number
   oldest_open: { key: string; age_days: number } | null
+  created_daily?: CreatedDaily | null // задачи, созданные после старта спринта, по дням
 }
 type NameCount = { name: string; n: number }
 export type ApiReport = {
@@ -32,6 +35,7 @@ export type P = {
   rw: number; ts: number; dn: number; bug: number; carry: number; add: number; unpl: number; blk: number; stale: number
   h: number; ppl: number; rdy: number; tst: number; oKey: string | null; oAge: number; carryOpen: number
   left: number; done: number; time: number
+  cd: CreatedDaily | null
 }
 export type Row = { k: string; t: number; bl: number; wk: number; cr: number; rw: number; ts: number; dn: number; bug: number
   blStale: number; act: number; any: number; blAge: number; blUpd: number }
@@ -51,7 +55,7 @@ export function buildModel(r: ApiReport) {
     cr: p.cr, rw: p.rw, ts: p.ts, dn: p.dn, bug: p.bug, carry: p.carry, add: p.added, unpl: p.unplanned, blk: p.blocked,
     stale: p.stale, h: p.hours, ppl: p.people, rdy: p.ready_deploy, tst: p.in_test,
     oKey: p.oldest_open?.key ?? null, oAge: p.oldest_open?.age_days ?? 0, carryOpen: p.carry_open,
-    left: p.left_days ?? Number.NaN, done: p.ready_pct, time: p.time_pct,
+    left: p.left_days ?? Number.NaN, done: p.ready_pct, time: p.time_pct, cd: p.created_daily ?? null,
   }))
   const PBY = Object.fromEntries(PR.map(p => [p.k, p]))
   const PEOPLE: Record<string, { n: string; rows: Row[] }> = {}
