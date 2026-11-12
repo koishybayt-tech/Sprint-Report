@@ -81,6 +81,9 @@ type SprintReport struct {
 	AbsencesAt  map[string]time.Time                `json:"absences_at"` // ABSAT: последняя синхронизация по источнику
 	Testing     map[string]map[string]*TestingCount `json:"testing"`     // проект → тестировщик ("" — пусто) → задачи в Test
 	Next        map[string]NextSprint               `json:"next"`
+	// Queue — задачи «Сделать / В работе / Rework» вне активных спринтов (будущий/закрытый спринт, без спринта): имя → число.
+	// Входят в очередь «Нужны задачи» наравне с задачами активных спринтов.
+	Queue map[string]int `json:"queue"`
 }
 
 var bottleneckStatus = map[string]bool{"Blocked": true, "Need Rework": true, "Требует уточнения": true}

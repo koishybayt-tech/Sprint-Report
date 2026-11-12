@@ -62,6 +62,28 @@ func OpenSprintIssues(ctx context.Context, pool *pgxpool.Pool) ([]metrics.Issue,
 	})
 }
 
+// QueueOutsideSprints — число незакрытых задач «Сделать / В работе / Rework» у исполнителя вне активных спринтов
+// (будущий или закрытый спринт, либо без спринта) — по всем проектам. Дополняет очередь из активных спринтов.
+func QueueOutsideSprints(ctx context.Context, pool *pgxpool.Pool) (map[string]int, error) {
+	rows, err := pool.Query(ctx, `SELECT assignee, count(*) FROM jira_issues
+		WHERE NOT in_open_sprints AND resolved IS NULL AND status_group IN ('todo', 'wk', 'rw') AND coalesce(assignee, '') <> ''
+		GROUP BY assignee`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := map[string]int{}
+	for rows.Next() {
+		var n string
+		var c int
+		if err := rows.Scan(&n, &c); err != nil {
+			return nil, err
+		}
+		m[n] = c
+	}
+	return m, rows.Err()
+}
+
 // ProjectLeads — руководитель (лид в Jira) по ключу проекта.
 func ProjectLeads(ctx context.Context, pool *pgxpool.Pool) (map[string]string, error) {
 	rows, err := pool.Query(ctx, `SELECT key, coalesce(lead, '—') FROM jira_projects`)

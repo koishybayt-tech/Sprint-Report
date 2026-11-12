@@ -2,7 +2,10 @@
 // Ряд приходит с сервера: от даты from по календарным дням (Алматы), total — создано, unplanned — из них внеплановых.
 
 export type CreatedDaily = { from: string; total: number[]; unplanned: number[] }
-export type FlowDay = { date: string; n: number; u: number; weekend: boolean }
+export type FlowDay = { date: string; n: number; u: number; weekend: boolean; hot: boolean }
+
+// Всплеск: за один день в спринт «залетело» не меньше стольких новых задач.
+export const SPIKE = 10
 export type Flow = {
   days: FlowDay[]
   total: number // создано всего
@@ -23,7 +26,7 @@ export function flowOf(cd: CreatedDaily | null | undefined): Flow | null {
   const days: FlowDay[] = cd.total.map((n, i) => {
     const x = addDays(cd.from, i)
     const wd = x.getUTCDay()
-    return { date: x.toISOString().slice(0, 10), n, u: Math.min(n, cd.unplanned?.[i] ?? 0), weekend: wd === 0 || wd === 6 }
+    return { date: x.toISOString().slice(0, 10), n, u: Math.min(n, cd.unplanned?.[i] ?? 0), weekend: wd === 0 || wd === 6, hot: n >= SPIKE }
   })
   const total = days.reduce((a, d) => a + d.n, 0)
   const unplanned = days.reduce((a, d) => a + d.u, 0)

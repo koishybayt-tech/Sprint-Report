@@ -41,6 +41,9 @@ func loadReport(r *http.Request, pool *pgxpool.Pool) (*metrics.SprintReport, err
 		return nil, err
 	}
 	rep := metrics.BuildSprintReport(issues, leads, tl, futures, si, *last)
+	if rep.Queue, err = db.QueueOutsideSprints(ctx, pool); err != nil {
+		return nil, err
+	}
 
 	// Отсутствия, не закончившиеся к дате среза: отпуска Bitrix, затем больничные и «отпросился» из Telegram
 	// (порядок важен — Telegram, пересекающийся с отпуском, не дублируется).

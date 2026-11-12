@@ -21,6 +21,7 @@ export type ApiReport = {
   bottlenecks: { key: string; summary: string; status: string; assignee: string; days: number; priority: string }[]
   roles: Record<string, string>
   logins: Record<string, string>
+  queue?: Record<string, number> // задачи «Сделать / В работе / Rework» вне активных спринтов: имя → число
   team_leads: string[]
   inactive: string[]
   absences: { name: string; type: 'vac' | 'bs' | 'sick' | 'off'; from: string; to: string | null; source: string; note: string }[]
@@ -71,7 +72,7 @@ export function buildModel(r: ApiReport) {
   return {
     PR, PBY, PEOPLE, NSD,
     QX: r.testers, X: r.bottlenecks, U: r.logins, POS: r.roles, TL: r.team_leads, TST: r.testing,
-    INACT: r.inactive,
+    INACT: r.inactive, QUEUE: r.queue ?? {} as Record<string, number>,
     AX: r.people,
     AB: r.absences.map(a => ({ n: a.name, ty: a.type, fr: a.from, to: a.to, src: a.source, note: a.note || '' })),
     ABSAT: r.absences_at,

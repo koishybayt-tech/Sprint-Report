@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { barPct, flowOf } from './flow'
+import { barPct, flowOf, SPIKE } from './flow'
+
+describe('всплески', () => {
+  it('день с числом задач от порога SPIKE помечается hot', () => {
+    const f = flowOf({ from: '2026-10-26', total: [SPIKE - 1, SPIKE, SPIKE + 5], unplanned: [0, 0, 0] })!
+    expect(f.days.map(d => d.hot)).toEqual([false, true, true])
+  })
+})
 
 describe('flowOf', () => {
   // 26.10.2026 — понедельник

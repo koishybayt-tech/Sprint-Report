@@ -3,7 +3,7 @@
 // Вкладки по людям и «Отсутствия» — в components/SprintsPeople.vue.
 import { type ApiReport, type Col, type P, UNASSIGNED, buildModel, esc, fmt, jiraLinks, lvl, pct, sumOf } from '~/utils/sprints'
 import { defaultCtl, peopleLogic, switchTip } from '~/utils/sprintsPeople'
-import { barPct, flowOf } from '~/utils/flow'
+import { barPct, flowOf, SPIKE } from '~/utils/flow'
 
 const { apiBase, jiraBase } = useRuntimeConfig().public
 const route = useRoute()
@@ -211,6 +211,9 @@ const stabCols: Col<P>[] = [
 // Динамика созданных задач: проекты с новыми задачами после старта — по убыванию потока, остальные — списком.
 const flows = computed(() => scopedP.value.map(p => ({ p, f: flowOf(p.cd) })).filter(x => x.f && x.f.total > 0)
   .sort((a, b) => b.f!.total - a.f!.total || b.f!.unplanned - a.f!.unplanned || a.p.k.localeCompare(b.p.k)) as { p: P; f: NonNullable<ReturnType<typeof flowOf>> }[])
+// Всплески — дни, когда в спринт проекта «залетело» много новых задач; самые крупные сверху.
+const spikes = computed(() => flows.value.flatMap(x => x.f.days.filter(d => d.hot).map(d => ({ k: x.p.k, date: d.date, n: d.n, u: d.u })))
+  .sort((a, b) => b.n - a.n || a.k.localeCompare(b.k)).slice(0, 12))
 const noFlow = computed(() => scopedP.value.filter(p => !flows.value.some(x => x.p.k === p.k)).map(p => p.k))
 const flowTitle = (d: { date: string; n: number; u: number }) => `${fmt(d.date)}: создано ${d.n}${d.u ? `, внеплановых ${d.u}` : ''}`
 const qualCols = computed<Col<P>[]>(() => {
@@ -384,12 +387,12 @@ const notes = computed(() => {
       </section>
 
       <section v-else-if="tab === 'stab'">
-        <h2>Стабильность спринтов</h2>
-        <p class="lead">Сколько задач перенесено из прошлых спринтов, сколько создано после старта текущего и сколько помечено внеплановыми.</p>
-        <SortTable :cols="stabCols" :rows="scopedP" :init="[4, 'desc']" />
-
         <h2>Динамика созданных задач в спринте</h2>
-        <p class="lead">Сколько задач создано в каждый день текущего спринта после его старта — по каждому проекту: видно, когда в спринт «прилетало» много новых задач. Красным — внеплановые (поле «План» = «Внеплановая»), светлый фон — выходные. Считаются задачи, которые сейчас лежат в спринте; наведите на колонку, чтобы увидеть день.</p>
+        <p class="lead">Сколько задач создано в каждый день текущего спринта после его старта — по каждому проекту: видно, когда в спринт «прилетало» много новых задач. Красным — внеплановые (поле «План» = «Внеплановая»), светлый фон — выходные, рамка — всплеск (от {{ SPIKE }} задач за день). Считаются задачи, которые сейчас лежат в спринте; наведите на колонку, чтобы увидеть день.</p>
+        <div v-if="spikes.length" class="flow-spikes">
+          <b>Всплески:</b>
+          <span v-for="s in spikes" :key="s.k + s.date" class="fs" :class="lvl(pct(s.u, s.n), 30, 60)">{{ s.k }} · {{ fmt(s.date) }} · <b>{{ s.n }}</b><template v-if="s.u"> (внепл. {{ s.u }})</template></span>
+        </div>
         <div v-if="flows.length" class="flow">
           <article v-for="x in flows" :key="x.p.k" class="flow-card">
             <header><b>{{ x.p.k }}</b><span class="sub">{{ x.p.n }} · {{ x.p.sp }}</span></header>
@@ -399,7 +402,7 @@ const notes = computed(() => {
               <span v-if="x.f.peak">пик {{ fmt(x.f.peak.date) }}: <b>{{ x.f.peak.n }}</b></span>
             </div>
             <div class="flow-bars" role="img" :aria-label="`${x.p.k}: создано ${x.f.total} задач, внеплановых ${x.f.unplanned}`">
-              <div v-for="d in x.f.days" :key="d.date" class="flow-col" :class="{ we: d.weekend }" :title="flowTitle(d)">
+              <div v-for="d in x.f.days" :key="d.date" class="flow-col" :class="{ we: d.weekend, hot: d.hot }" :title="flowTitle(d)">
                 <i v-if="d.n - d.u" class="pl" :style="{ height: barPct(d.n - d.u, x.f.max) + '%' }" />
                 <i v-if="d.u" class="un" :style="{ height: barPct(d.u, x.f.max) + '%' }" />
               </div>
@@ -409,6 +412,10 @@ const notes = computed(() => {
         </div>
         <p v-else class="sub">Новых задач после старта спринтов нет.</p>
         <p v-if="flows.length && noFlow.length" class="sub">Без новых задач после старта: {{ noFlow.join(', ') }}.</p>
+
+        <h2>Стабильность спринтов</h2>
+        <p class="lead">Сколько задач перенесено из прошлых спринтов, сколько создано после старта текущего и сколько помечено внеплановыми.</p>
+        <SortTable :cols="stabCols" :rows="scopedP" :init="[4, 'desc']" />
       </section>
 
       <section v-else-if="tab === 'qual'">

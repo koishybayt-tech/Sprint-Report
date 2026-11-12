@@ -21,6 +21,10 @@ const OpenSprintsJQL = "cf[10104] in openSprints()"
 // JQL задач будущих спринтов — для числа задач в «следующем спринте» (ns_fetch.js считает cf[10104] = id).
 const FutureSprintsJQL = "cf[10104] in futureSprints()"
 
+// JQL очереди вне спринтов: незакрытые назначенные задачи «Сделать / В работе / Rework» (id статусов — CLAUDE.md).
+// Нужен «Нужны задачи»: задача без спринта, в будущем или закрытом спринте — тоже работа человека.
+const QueueJQL = "assignee is not EMPTY AND resolution = Unresolved AND status in (10100, 10011, 10000) ORDER BY key ASC"
+
 // JQL тимлидов (TL в inc.js): исполнители из группы adata-team-leads с задачами за 180 дней.
 const TeamLeadsJQL = `assignee in membersOf("adata-team-leads") AND updated >= -180d`
 
@@ -30,6 +34,7 @@ const skipBoardID = 140
 type SyncStats struct {
 	Issues        int `json:"issues"`
 	FutureIssues  int `json:"future_issues"`
+	Queue         int `json:"queue"` // незакрытых задач очереди (любой спринт или без него)
 	Projects      int `json:"projects"`
 	Sprints       int `json:"sprints"`
 	FutureSprints int `json:"future_sprints"`
@@ -97,6 +102,14 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 		}
 	}
 
+	// Очередь вне спринтов. Если запрос упал — оставляем то, что уже в базе, синк не валим.
+	queue, qErr := c.Search(ctx, QueueJQL, IssueFields)
+	if qErr != nil {
+		log.Warn("jira: очередь вне спринтов", "err", qErr)
+	} else {
+		log.Info("jira: очередь вне спринтов", "count", len(queue))
+	}
+
 	inUse := map[string]bool{}
 	for _, is := range issues {
 		inUse[is.ProjectKey] = true
@@ -134,6 +147,13 @@ func fullSync(ctx context.Context, pool *pgxpool.Pool, c *Client, log *slog.Logg
 	}
 	if err := upsertIssues(ctx, tx, futureIssues, "in_future_sprints"); err != nil {
 		return err
+	}
+	if qErr == nil {
+		// Флаги спринтов не трогаем: задачи очереди, уже лежащие в спринтах, остаются как были.
+		if err := upsertIssues(ctx, tx, queue, ""); err != nil {
+			return err
+		}
+		st.Queue = len(queue)
 	}
 	if err := writeChanges(ctx, tx, issues); err != nil {
 		return err

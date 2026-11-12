@@ -360,6 +360,10 @@ td.actions{white-space:nowrap}td.actions>*+*{margin-left:10px}
 .flow-bars{display:flex;align-items:flex-end;gap:2px;height:72px;border-bottom:1px solid var(--line)}
 .flow-col{flex:1;min-width:3px;height:100%;display:flex;flex-direction:column-reverse;border-radius:2px 2px 0 0}
 .flow-col.we{background:var(--accent-soft)}
+.flow-col.hot{outline:1px solid var(--bad);outline-offset:1px}
+.flow-spikes{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;font-size:13px}
+.flow-spikes .fs{border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--surface);font-family:var(--f-mono);font-size:12px}
+.flow-spikes .fs.hi{border-color:var(--bad);color:var(--bad)}.flow-spikes .fs.mid{border-color:var(--warn);color:var(--warn)}
 .flow-col i{display:block;width:100%}
 .flow-col i.pl{background:var(--accent)}
 .flow-col i.un{background:var(--bad)}

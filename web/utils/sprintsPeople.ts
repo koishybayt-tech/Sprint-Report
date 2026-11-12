@@ -28,8 +28,8 @@ export function peopleLogic(m: Model, ctl: Ctl, inS: (k: string) => boolean, all
   const { PEOPLE, PR, PBY, LEAD, roleOf, isTL, INACT, AB, SNAP } = m
   const sumRows = (rows: Row[], f: keyof Row) => rows.reduce((a, r) => a + (r[f] as number), 0)
 
-  // need: очередь по ВСЕМ проектам
-  const needInfo = (n: string) => { const rows = PEOPLE[n].rows; return sumRows(rows, 'bl') + sumRows(rows, 'wk') + sumRows(rows, 'rw') }
+  // need: очередь по ВСЕМ проектам; плюс задачи вне активных спринтов (будущий/закрытый спринт, без спринта)
+  const needInfo = (n: string) => { const rows = PEOPLE[n].rows; return sumRows(rows, 'bl') + sumRows(rows, 'wk') + sumRows(rows, 'rw') + (m.QUEUE?.[n] ?? 0) }
   // switch: группировка по руководителю проекта
   function switchInfo(n: string) {
     const G: Record<string, Group> = {}
