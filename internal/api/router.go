@@ -27,6 +27,7 @@ func NewRouter(pool *pgxpool.Pool, log *slog.Logger, cfg config.Config) http.Han
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer)
+	mountExt(r, pool, log, cfg) // внешний API по статичному токену: /api/ext/v1
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/healthz", healthz(pool, log))
 		r.Post("/auth/login", ah.login)

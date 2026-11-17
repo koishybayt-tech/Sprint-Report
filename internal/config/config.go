@@ -36,6 +36,9 @@ type Config struct {
 	// SECRETS_KEY — ключ шифрования секретов пользователей (токены личных Telegram-ботов руководителей), 16+ символов.
 	// Не задан — уведомления только в колокольчике сервиса.
 	SecretsKey string
+
+	// EXT_API_TOKEN — статичный токен внешнего API (/api/ext/v1/*), 24+ символов. Не задан — внешний API выключен (404). Секрет, не логировать.
+	ExtAPIToken string
 }
 
 func Load() (Config, error) {
@@ -48,7 +51,11 @@ func Load() (Config, error) {
 		BitrixAPIKey:      strings.TrimSpace(os.Getenv("BITRIX_API_KEY")),
 		TgBotToken:        strings.TrimSpace(os.Getenv("TG_BOT_TOKEN")),
 		SecretsKey:        strings.TrimSpace(os.Getenv("SECRETS_KEY")),
+		ExtAPIToken:       strings.TrimSpace(os.Getenv("EXT_API_TOKEN")),
 		TgSaturdayAt:      getenv("TG_SATURDAY_AT", "20:30"),
+	}
+	if c.ExtAPIToken != "" && len(c.ExtAPIToken) < 24 {
+		return c, errors.New("EXT_API_TOKEN: нужно не меньше 24 символов (например, openssl rand -hex 24)")
 	}
 	if c.DatabaseURL == "" {
 		return c, errors.New("DATABASE_URL не задан")

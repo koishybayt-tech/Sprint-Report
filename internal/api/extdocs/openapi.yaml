@@ -1,0 +1,1076 @@
+openapi: 3.0.3
+info:
+  title: Adata Reports — внешний API
+  version: 1.0.0
+  description: |
+    Только чтение. Те же данные, что в отчётах сервиса: спринты Jira, нагрузка и успеваемость сотрудников,
+    «Контроль спринта руководителей», посещаемость.
+
+    **Авторизация.** Статичный токен в заголовке `Authorization: Bearer <токен>` (или `X-API-Key: <токен>`).
+    Токен задаётся переменной `EXT_API_TOKEN` на сервере; в query-параметре не принимается.
+    Токен даёт доступ ко всем данным (включая посещаемость и причины отсутствий), поэтому хранить его нужно как пароль.
+    После 20 неверных токенов за 10 минут адрес блокируется на это время (429).
+
+    **Данные.** Обновляются синхронизацией с Jira (раз в 30 минут в рабочее время, 08:30–20:00 по Алматы).
+    В каждом ответе `meta.data_updated_at` — когда данные обновлялись в последний раз.
+    Время и даты — Asia/Almaty, даты в формате `YYYY-MM-DD`.
+
+    **Формат ответа.** `{"meta": {...}, "data": ...}`; для списков `meta.count` — число элементов.
+    Ошибки: `{"error": "текст"}` с кодом 401, 404, 429, 503 (нет данных: синхронизации Jira ещё не было) или 500.
+
+    Подробное описание метрик — в `docs/external-api.md` и `docs/metrics.md`.
+servers:
+  - url: /api/ext/v1
+    description: Текущий сервер
+security:
+  - bearer: []
+  - apiKey: []
+tags:
+  - name: Статистика
+    description: Сводные показатели
+  - name: Проекты
+  - name: Сотрудники
+  - name: Руководители
+  - name: Тимлиды
+  - name: Тестировщики
+  - name: Посещаемость
+  - name: Списки
+    description: Готовые списки «кому нужны задачи», «что долго висит» и т. п.
+  - name: Дэшборды
+  - name: Служебное
+paths:
+  /ping:
+    get:
+      tags: [Служебное]
+      summary: Проверка токена и свежести данных
+      responses:
+        '200':
+          description: Токен верный
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status: { type: string, example: ok }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /stats/summary:
+    get:
+      tags: [Статистика]
+      summary: Общая картина по текущим спринтам
+      description: Число проектов и людей, задачи по статусам, доля готовности, внеплановые, Blocked, просроченные спринты, отсутствующие, «нужны задачи», перегруженные, долгие задачи.
+      responses:
+        '200':
+          description: Сводка
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Summary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+  /stats/performance:
+    get:
+      tags: [Статистика]
+      summary: Успеваемость в целом (за год, помесячно)
+      description: |
+        Сумма по всем сотрудникам: закрытые задачи, возвраты в Need Rework, выполнение плана спринта в срок, потраченные часы,
+        отметки посещаемости. Считается по задачам, обновлявшимся с начала года (`history_loaded_at` — когда загружена история Jira).
+      parameters:
+        - name: totals_only
+          in: query
+          description: Только итоги за год, без разбивки по месяцам
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Успеваемость
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/OrgPerformance' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /projects:
+    get:
+      tags: [Проекты]
+      summary: Статистика по проектам
+      description: "Проекты с активным спринтом: задачи по статусам, готовность, внеплановые, поток созданных задач, Blocked, залежавшиеся."
+      parameters:
+        - { name: lead, in: query, description: "Руководитель проекта в Jira (точное ФИО)", schema: { type: string } }
+        - { name: q, in: query, description: "Поиск по ключу и названию", schema: { type: string } }
+        - name: sort
+          in: query
+          description: Сортировка (по умолчанию по ключу)
+          schema: { type: string, enum: [key, done_pct, tasks, unplanned] }
+      responses:
+        '200':
+          description: Список проектов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Project' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+  /projects/{key}:
+    get:
+      tags: [Проекты]
+      summary: Детали проекта
+      description: Проект, люди проекта с задачами, тестировщики, узкие места и следующий спринт.
+      parameters:
+        - { name: key, in: path, required: true, description: "Ключ проекта в Jira", schema: { type: string, example: AC } }
+      responses:
+        '200':
+          description: Детали проекта
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ProjectDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /employees:
+    get:
+      tags: [Сотрудники]
+      summary: Статистика по сотрудникам
+      description: |
+        Нагрузка людей в текущих спринтах (по всем проектам) с признаками «нужны задачи» и «перегружен».
+        С `include=year` добавляются показатели за год.
+      parameters:
+        - { name: project, in: query, description: "Ключ проекта (у сотрудника есть задачи в нём)", schema: { type: string } }
+        - { name: lead, in: query, description: "Руководитель проекта", schema: { type: string } }
+        - { name: role, in: query, description: "Часть должности (Backend, Designer…)", schema: { type: string } }
+        - { name: q, in: query, description: "Поиск по ФИО и логину", schema: { type: string } }
+        - { name: need_tasks, in: query, description: "Только кому нужны задачи", schema: { type: boolean } }
+        - { name: overloaded, in: query, description: "Только перегруженные", schema: { type: boolean } }
+        - { name: absent, in: query, description: "Только отсутствующие сейчас", schema: { type: boolean } }
+        - { name: need_threshold, in: query, description: 'Порог «нужны задачи»: очередь не больше (по умолчанию 2)', schema: { type: integer, default: 2 } }
+        - { name: overload_threshold, in: query, description: 'Порог «перегружен»: бэклог не меньше (по умолчанию 8)', schema: { type: integer, default: 8 } }
+        - name: include
+          in: query
+          description: 'Дополнительно (через запятую): `id` — числовой id сотрудника, `year` — показатели за год (подгружает историю, первый вызов дольше)'
+          schema: { type: string, example: 'id,year' }
+      responses:
+        '200':
+          description: Список сотрудников
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/EmployeeLoad' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+  /employees/{id}:
+    get:
+      tags: [Сотрудники]
+      summary: Детали сотрудника
+      description: Нагрузка в спринтах, помесячные показатели за год, отсутствия; по `include` — задачи года и журнал посещаемости.
+      parameters:
+        - { name: id, in: path, required: true, description: "Логин Jira или числовой id сотрудника", schema: { type: string, example: sidorov } }
+        - name: include
+          in: query
+          description: 'Дополнительно (через запятую): `tasks` — задачи года, `attendance_log` — журнал посещаемости'
+          schema: { type: string, example: 'tasks,attendance_log' }
+      responses:
+        '200':
+          description: Карточка сотрудника
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/EmployeeDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /leads:
+    get:
+      tags: [Руководители]
+      summary: Статистика по руководителям проектов
+      description: "Руководители проектов из Jira: их проекты, задачи, готовность, внеплановые, Blocked, просроченные спринты, число людей."
+      parameters:
+        - { name: q, in: query, description: "Поиск по ФИО", schema: { type: string } }
+      responses:
+        '200':
+          description: Список руководителей
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeadStat' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+  /leads/{name}:
+    get:
+      tags: [Руководители]
+      summary: Детали руководителя
+      description: |
+        Проекты и люди руководителя (по Jira) и готовый расчёт «Контроля спринта руководителей» (`control`): блокировки,
+        долгие задачи, пробелы в планировании, тестирование. Имя — ФИО целиком, URL-кодированное.
+      parameters:
+        - { name: name, in: path, required: true, description: "ФИО руководителя (URL-кодированное)", schema: { type: string, example: Тажибаев%20Нурлыбек } }
+      responses:
+        '200':
+          description: Детали руководителя
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          jira_projects: { nullable: true, allOf: [{ $ref: '#/components/schemas/LeadStat' }] }
+                          projects:
+                            type: array
+                            items: { $ref: '#/components/schemas/Project' }
+                          people:
+                            type: array
+                            items: { $ref: '#/components/schemas/EmployeeLoad' }
+                          control:
+                            nullable: true
+                            type: object
+                            description: Расчёт «Контроля спринта руководителей» (null — руководитель не в списке контроля). Поля те же, что у `GET /lead-control` во внутреннем API.
+                            additionalProperties: true
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /team-leads:
+    get:
+      tags: [Тимлиды]
+      summary: Статистика по тимлидам
+      description: Тимлиды (группа `adata-team-leads` в Jira) и их личная нагрузка в текущих спринтах.
+      responses:
+        '200':
+          description: Список тимлидов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/EmployeeLoad' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+  /testers:
+    get:
+      tags: [Тестировщики]
+      summary: Статистика по тестировщикам
+      description: "Люди, указанные в поле «Тестировщик»: задач, сколько в Test, закрыто, по проектам и ожидающие тестирования."
+      parameters:
+        - { name: q, in: query, description: "Поиск по ФИО", schema: { type: string } }
+      responses:
+        '200':
+          description: Список тестировщиков
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Tester' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+  /testers/{name}:
+    get:
+      tags: [Тестировщики]
+      summary: Детали тестировщика
+      parameters:
+        - { name: name, in: path, required: true, description: "ФИО или логин Jira (URL-кодированное)", schema: { type: string } }
+      responses:
+        '200':
+          description: Тестировщик
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Tester' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /attendance:
+    get:
+      tags: [Посещаемость]
+      summary: Статистика посещаемости за период
+      description: |
+        Кто отсутствует сейчас и показатели по сотрудникам за период (по умолчанию — текущий месяц): число и минуты опозданий, ранних уходов,
+        отлучек, целых дней, больничных; рабочие дни в отпуске/больничном/БС (пн–пт, без праздников).
+        Данные — из сообщений Telegram-группы, отпусков Bitrix и больничных.
+      parameters:
+        - { name: from, in: query, description: "Начало периода", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Конец периода", schema: { type: string, format: date } }
+        - { name: q, in: query, description: "Поиск по ФИО и логину", schema: { type: string } }
+        - { name: reasons, in: query, description: "Показывать причины отсутствий («отпуск», «больничный»…) у тех, кто отсутствует сейчас", schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: Сводка посещаемости
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AttendanceSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /attendance/events:
+    get:
+      tags: [Посещаемость]
+      summary: Отдельные записи посещаемости
+      description: Записи из Telegram-группы (опоздал, ушёл раньше, отлучка, день, больничный) с причинами и согласованием. Персональные данные.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: employee, in: query, description: "ФИО (часть) или логин", schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [late, early, mid, day, sick, vac, upd] } }
+        - { name: limit, in: query, description: "Не больше записей", schema: { type: integer } }
+      responses:
+        '200':
+          description: Записи
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AttendanceEvent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /absences:
+    get:
+      tags: [Посещаемость]
+      summary: Отсутствия на ближайшие дни
+      description: Идущие сейчас и будущие отсутствия (отпуск, больничный, БС, «отпросился»).
+      parameters:
+        - { name: days, in: query, description: "На сколько дней вперёд", schema: { type: integer, default: 14 } }
+        - { name: reasons, in: query, description: "Показывать причины", schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: Отсутствия
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AbsenceRow' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/need-tasks:
+    get:
+      tags: [Списки]
+      summary: Кому нужны задачи
+      description: |
+        Очередь (бэклог + в работе + реворк) по всем проектам не больше порога. Не попадают тимлиды, ПМы, руководители проектов, QA,
+        отсутствующие сейчас и неактивные в Jira (если не `include_excluded`).
+      parameters:
+        - { name: threshold, in: query, schema: { type: integer, default: 2 } }
+        - { name: include_excluded, in: query, description: "Показывать также ПМов, QA и тимлидов", schema: { type: boolean, default: false } }
+      responses:
+        '200': { $ref: '#/components/responses/EmployeeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/overloaded:
+    get:
+      tags: [Списки]
+      summary: Кто перегружен бэклогом
+      parameters:
+        - { name: threshold, in: query, description: "Бэклог не меньше", schema: { type: integer, default: 8 } }
+        - { name: include_excluded, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200': { $ref: '#/components/responses/EmployeeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/long-in-work:
+    get:
+      tags: [Списки]
+      summary: Задачи, которые долго в работе
+      description: Задачи в «В работе», Code review и Need Rework от 5 дней с момента, когда их взяли в работу (по истории Jira). Источник — «Контроль спринта руководителей».
+      parameters:
+        - { $ref: '#/components/parameters/Project' }
+        - { $ref: '#/components/parameters/Assignee' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { $ref: '#/components/responses/LongTaskList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/long-in-test:
+    get:
+      tags: [Списки]
+      summary: Задачи, которые долго на тесте
+      description: Задачи в Test от 3 дней с последнего перехода в Test.
+      parameters:
+        - { $ref: '#/components/parameters/Project' }
+        - { $ref: '#/components/parameters/Assignee' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { $ref: '#/components/responses/LongTaskList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/blocked:
+    get:
+      tags: [Списки]
+      summary: Заблокированные задачи (Blocked)
+      parameters:
+        - { $ref: '#/components/parameters/Project' }
+        - { $ref: '#/components/parameters/Assignee' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { $ref: '#/components/responses/LongTaskList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/bottlenecks:
+    get:
+      tags: [Списки]
+      summary: Узкие места
+      description: Незакрытые задачи в Blocked / Need Rework / «Требует уточнения» или без обновлений больше 30 дней (по спринтам).
+      parameters:
+        - { $ref: '#/components/parameters/Project' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Узкие места, самые давние сверху
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Bottleneck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/low-sprints:
+    get:
+      tags: [Списки]
+      summary: Спринты с низким процентом закрытия
+      description: |
+        Спринты, где прошло не меньше 20% времени. `bad` — готово меньше 30% или отставание от времени больше 25 п.п.;
+        `warn` — готово меньше 50% или отставание больше 10 п.п.
+      responses:
+        '200':
+          description: Низкие спринты, самые низкие сверху
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/LowSprint' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/risks:
+    get:
+      tags: [Списки]
+      summary: Риски по проектам
+      description: Спринт не закрыт в срок, отстаёт от времени больше чем на 25 п.п., есть Blocked, нет следующего спринта (когда до конца ≤ 3 дн.).
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Риски, самые тяжёлые сверху
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Risk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /lists/creation-spikes:
+    get:
+      tags: [Списки]
+      summary: Всплески создания задач в спринте
+      description: Дни, когда в спринт проекта «залетело» от 10 новых задач за день (после старта спринта), с числом внеплановых.
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Всплески, крупнейшие первыми
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Spike' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /dashboards/sprints:
+    get:
+      tags: [Дэшборды]
+      summary: Дэшборд спринтов (как экран ТВ)
+      description: Одним ответом ключевые числа и все важные сигналы — для экрана или внешнего дэшборда.
+      parameters:
+        - { name: top, in: query, description: "Сколько строк в каждом списке (по умолчанию 10)", schema: { type: integer, default: 10 } }
+      responses:
+        '200':
+          description: Дэшборд
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/NoData' }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Статичный токен (`EXT_API_TOKEN`)
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: То же значение токена
+  parameters:
+    Project: { name: project, in: query, description: "Ключ проекта", schema: { type: string } }
+    Assignee: { name: assignee, in: query, description: "Часть ФИО исполнителя", schema: { type: string } }
+    Limit: { name: limit, in: query, description: "Не больше строк", schema: { type: integer } }
+  responses:
+    Unauthorized:
+      description: Нет токена или он неверный (429 — слишком много неверных попыток)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NoData:
+      description: Данные ещё не загружены (не было синхронизации Jira)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    EmployeeList:
+      description: Список сотрудников
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Envelope'
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/EmployeeLoad' }
+    LongTaskList:
+      description: Список задач, самые долгие сверху
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Envelope'
+              - type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/LongTask' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    Meta:
+      type: object
+      properties:
+        data_updated_at: { type: string, format: date-time, nullable: true, description: "Когда последний раз синхронизирована Jira" }
+        generated_at: { type: string, format: date-time }
+        count: { type: integer, description: "Число элементов (для списков)" }
+    Envelope:
+      type: object
+      properties:
+        meta: { $ref: '#/components/schemas/Meta' }
+        data: {}
+    Tasks:
+      type: object
+      description: Задачи по статусам
+      properties:
+        total: { type: integer }
+        backlog: { type: integer, description: "Сделать" }
+        in_progress: { type: integer, description: "В работе" }
+        code_review: { type: integer }
+        rework: { type: integer, description: "Need Rework" }
+        testing: { type: integer, description: "Все статусы, кроме Сделать, В работе, Code review, Need Rework и Готово" }
+        done: { type: integer, description: "Готово" }
+        bugs: { type: integer, description: "Из них ошибок" }
+    Sprint:
+      type: object
+      nullable: true
+      properties:
+        name: { type: string, example: AC 2026-22 }
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+        days_left: { type: integer, nullable: true, description: "Дней до конца спринта; отрицательное — просрочен" }
+        time_pct: { type: integer, description: "Доля прошедшего времени спринта, %" }
+    CreatedDaily:
+      type: object
+      nullable: true
+      description: Задачи, созданные после старта спринта, по календарным дням от `from`
+      properties:
+        from: { type: string, format: date }
+        total: { type: array, items: { type: integer } }
+        unplanned: { type: array, items: { type: integer }, description: "Из них внеплановых" }
+    Project:
+      type: object
+      properties:
+        key: { type: string, example: AC }
+        name: { type: string, example: Adata Compliance }
+        lead: { type: string, description: "Руководитель проекта в Jira" }
+        sprint: { $ref: '#/components/schemas/Sprint' }
+        tasks: { $ref: '#/components/schemas/Tasks' }
+        done_pct: { type: integer, description: "Доля задач в «Готово», %" }
+        carried_over: { type: integer, description: "Задач, прошедших больше одного спринта" }
+        carried_open: { type: integer, description: "Из них не закрыто" }
+        added_after_start: { type: integer, description: "Создано после старта спринта" }
+        unplanned: { type: integer, description: "Внеплановых (поле «План» = «Внеплановая»)" }
+        unplanned_pct: { type: integer }
+        blocked: { type: integer }
+        stale: { type: integer, description: "Незакрытых без обновлений больше 14 дней" }
+        ready_to_deploy: { type: integer }
+        in_test: { type: integer, description: "В статусе Test" }
+        people: { type: integer }
+        hours: { type: number, description: "Списанное время, ч" }
+        oldest_open:
+          type: object
+          nullable: true
+          properties:
+            key: { type: string }
+            age_days: { type: integer }
+        created_daily: { $ref: '#/components/schemas/CreatedDaily' }
+    ProjectDetail:
+      type: object
+      properties:
+        project: { $ref: '#/components/schemas/Project' }
+        people:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              login: { type: string }
+              position: { type: string }
+              tasks: { $ref: '#/components/schemas/Tasks' }
+              queue: { type: integer, description: "Бэклог + в работе + реворк" }
+        testers:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              project: { type: string }
+              tasks: { type: integer }
+              in_test: { type: integer }
+              done: { type: integer }
+              waiting: { type: integer, description: "В Test сейчас (задачи текущего спринта)" }
+              open_all: { type: integer }
+        bottlenecks:
+          type: array
+          items: { $ref: '#/components/schemas/Bottleneck' }
+        next_sprint:
+          type: object
+          nullable: true
+          description: Следующий спринт проекта (id, название, даты, число задач, разбивка по статусам и исполнителям)
+          additionalProperties: true
+    Absence:
+      type: object
+      nullable: true
+      properties:
+        type: { type: string, enum: [vac, bs, sick, off], description: 'vac — отпуск, bs — без содержания, sick — больничный, off — отпросился' }
+        from: { type: string, format: date }
+        to: { type: string, format: date, nullable: true }
+        source: { type: string, enum: [Bitrix, Telegram, Вручную] }
+        note: { type: string, description: "Причина (только с reasons=true)" }
+    PersonProject:
+      type: object
+      properties:
+        project: { type: string }
+        lead: { type: string }
+        tasks: { $ref: '#/components/schemas/Tasks' }
+        stale_backlog: { type: integer, description: "В бэклоге без обновлений больше 7 дней" }
+    EmployeeLoad:
+      type: object
+      properties:
+        name: { type: string }
+        login: { type: string }
+        position: { type: string, example: Backend Developer }
+        team_lead: { type: boolean }
+        project_lead: { type: boolean }
+        jira_inactive: { type: boolean }
+        absent_now: { $ref: '#/components/schemas/Absence' }
+        tasks: { $ref: '#/components/schemas/Tasks' }
+        queue: { type: integer, description: "Бэклог + в работе + реворк" }
+        need_tasks: { type: boolean }
+        overloaded: { type: boolean }
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/PersonProject' }
+        id: { type: integer, description: "id сотрудника (при include=id или include=year)" }
+        year: { $ref: '#/components/schemas/Performance' }
+    Month:
+      type: object
+      properties:
+        month: { type: string, example: 2026-10 }
+        done: { type: integer, description: "Закрыто задач (месяц закрытия, текущему исполнителю)" }
+        bugs: { type: integer, description: "Из закрытых — ошибок" }
+        hours: { type: number }
+        carried: { type: integer, description: "Закрытых, прошедших больше одного спринта" }
+        planned: { type: integer, description: "План спринта — задачи закрытых спринтов" }
+        planned_on_time: { type: integer, description: "Из плана закрыто в срок (не позже 2 дней после конца спринта)" }
+        reworks: { type: integer, description: "Возвраты в Need Rework" }
+        cycle_days: { type: number, nullable: true, description: "Медиана цикла, дн." }
+        reported: { type: integer, description: "Создано как автор (reporter)" }
+        tested: { type: integer, description: "Закрыто как тестировщик" }
+        late: { type: integer }
+        early: { type: integer }
+        mid: { type: integer }
+        day: { type: integer }
+        sick: { type: integer }
+        minutes: { type: integer, description: "Минуты отметок посещаемости" }
+        late_study: { type: integer, description: "Опозданий по учёбе" }
+    Performance:
+      type: object
+      description: Итоги за год
+      properties:
+        done: { type: integer }
+        hours: { type: number }
+        planned: { type: integer }
+        planned_on_time: { type: integer }
+        on_time_pct: { type: integer, description: "Доля плана, закрытая в срок, %" }
+        reworks: { type: integer }
+        rework_pct: { type: integer, description: "Возвраты к закрытым, %" }
+        bugs: { type: integer }
+        carried: { type: integer }
+        attendance_minutes: { type: integer }
+        months:
+          type: array
+          items: { $ref: '#/components/schemas/Month' }
+    OrgPerformance:
+      allOf:
+        - $ref: '#/components/schemas/Performance'
+        - type: object
+          properties:
+            history_loaded_at: { type: string, format: date-time, nullable: true }
+            employees: { type: integer }
+    EmployeeDetail:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        login: { type: string }
+        position: { type: string }
+        team_lead: { type: boolean }
+        project_lead: { type: boolean }
+        sprint_load: { nullable: true, allOf: [{ $ref: '#/components/schemas/EmployeeLoad' }] }
+        year: { $ref: '#/components/schemas/Performance' }
+        year_projects:
+          type: array
+          description: '[ключ проекта, число задач] по убыванию'
+          items: { type: array, items: {} }
+        open_tasks:
+          type: object
+          properties:
+            not_started: { type: integer }
+            in_progress: { type: integer }
+        cycle_days_median: { type: number, nullable: true }
+        absent_now: { $ref: '#/components/schemas/Absence' }
+        absences:
+          type: array
+          items: { $ref: '#/components/schemas/Absence' }
+        tasks:
+          type: array
+          description: Только с include=tasks
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              summary: "{ type: string }"
+              type: { type: string }
+              status: { type: string }
+              created: { type: string }
+              closed: { type: string }
+              sprints: { type: integer }
+              returns: { type: integer }
+              cycle_days: { type: number, nullable: true }
+              hours: { type: number }
+              project: { type: string }
+        attendance_log:
+          type: array
+          description: Только с include=attendance_log
+          items:
+            type: object
+            properties:
+              date: { type: string }
+              what: { type: string }
+              minutes: { type: integer }
+              details: { type: string }
+    LeadStat:
+      type: object
+      properties:
+        name: { type: string }
+        projects: { type: array, items: { type: string } }
+        project_count: { type: integer }
+        tasks: { $ref: '#/components/schemas/Tasks' }
+        done_pct: { type: integer }
+        unplanned: { type: integer }
+        unplanned_pct: { type: integer }
+        added_after_start: { type: integer }
+        blocked: { type: integer }
+        stale: { type: integer }
+        in_test: { type: integer }
+        overdue_sprints: { type: integer, description: "Спринтов не закрыто к сроку" }
+        people: { type: integer }
+    Tester:
+      type: object
+      properties:
+        name: { type: string }
+        login: { type: string }
+        position: { type: string }
+        tasks: { type: integer, description: "Задач, где человек указан тестировщиком" }
+        in_test: { type: integer, description: "Из них сейчас в Test" }
+        done: { type: integer }
+        open: { type: integer }
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              project: { type: string }
+              tasks: { type: integer }
+              in_test: { type: integer }
+              done: { type: integer }
+              waiting: { type: integer, description: "В Test по отчёту «Загрузка QA» (задачи текущего спринта, без эпиков)" }
+              open_all: { type: integer }
+    AttendancePerson:
+      type: object
+      properties:
+        name: { type: string }
+        login: { type: string }
+        position: { type: string }
+        team_lead: { type: boolean }
+        counts:
+          type: object
+          properties:
+            events:
+              type: object
+              description: 'Тип записи → число: late, early, mid, day, sick, vac'
+              additionalProperties: { type: integer }
+            minutes:
+              type: object
+              description: Тип → минуты (late — опоздание, early — ушёл раньше, mid — отлучка, day — целый день)
+              additionalProperties: { type: integer }
+            total_minutes: { type: integer }
+        absence_days: { type: integer, description: "Рабочие дни в отпуске/больничном/БС за период" }
+        absent_now: { $ref: '#/components/schemas/Absence' }
+    AttendanceSummary:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        absent_today:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              login: { type: string }
+              position: { type: string }
+              absence: { $ref: '#/components/schemas/Absence' }
+        people:
+          type: array
+          items: { $ref: '#/components/schemas/AttendancePerson' }
+    AttendanceEvent:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        time: { type: string, description: "Время сообщения", example: '09:14' }
+        name: { type: string }
+        type: { type: string, enum: [late, early, mid, day, sick, vac, upd] }
+        minutes: { type: integer }
+        from: { type: string, description: "Время «с»" }
+        to: { type: string, description: "Время «до»" }
+        reason: { type: string }
+        reason_category: { type: string, enum: [study, health, family, personal, other] }
+        approved_by: { type: string }
+        makeup_date: { type: string, format: date }
+        makeup: { type: string, description: "Отработка" }
+    AbsenceRow:
+      allOf:
+        - $ref: '#/components/schemas/Absence'
+        - type: object
+          properties:
+            name: { type: string }
+            login: { type: string }
+            position: { type: string }
+            now: { type: boolean, description: "Отсутствует сейчас" }
+    LongTask:
+      type: object
+      properties:
+        key: { type: string, example: AC-2695 }
+        project: { type: string }
+        status: { type: string }
+        assignee: { type: string }
+        tester: { type: string }
+        days: { type: integer }
+        summary: "{ type: string }"
+    Bottleneck:
+      type: object
+      properties:
+        key: { type: string }
+        summary: "{ type: string }"
+        status: { type: string }
+        assignee: { type: string }
+        days: { type: integer, description: "Дней без обновлений" }
+        priority: { type: string }
+    LowSprint:
+      type: object
+      properties:
+        project: { type: string }
+        name: { type: string }
+        lead: { type: string }
+        sprint: { type: string }
+        done_pct: { type: integer }
+        time_pct: { type: integer }
+        days_left: { type: integer, nullable: true }
+        level: { type: string, enum: [bad, warn] }
+    Risk:
+      type: object
+      properties:
+        project: { type: string }
+        name: { type: string }
+        lead: { type: string }
+        done_pct: { type: integer }
+        time_pct: { type: integer }
+        score: { type: integer }
+        reasons:
+          type: array
+          items:
+            type: object
+            properties:
+              text: { type: string }
+              severity: { type: integer, description: "1 — внимание, 2 — важно, 3 — тревога" }
+    Spike:
+      type: object
+      properties:
+        project: { type: string }
+        date: { type: string, format: date }
+        created: { type: integer }
+        unplanned: { type: integer }
+    Summary:
+      type: object
+      properties:
+        projects: { type: integer }
+        people: { type: integer }
+        tasks: { $ref: '#/components/schemas/Tasks' }
+        done_pct: { type: integer }
+        unplanned: { type: integer }
+        unplanned_pct: { type: integer }
+        added_after_start: { type: integer }
+        blocked: { type: integer }
+        stale: { type: integer }
+        in_test: { type: integer }
+        overdue_sprints: { type: integer }
+        absent_now: { type: integer }
+        need_tasks: { type: integer }
+        overloaded: { type: integer }
+        long_in_work: { type: integer, nullable: true }
+        long_in_test: { type: integer, nullable: true }
+    Dashboard:
+      type: object
+      properties:
+        kpi: { $ref: '#/components/schemas/Summary' }
+        absent_today:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              position: { type: string }
+              absence: { $ref: '#/components/schemas/Absence' }
+        need_tasks:
+          type: array
+          items: { $ref: '#/components/schemas/EmployeeLoad' }
+        overloaded:
+          type: array
+          items: { $ref: '#/components/schemas/EmployeeLoad' }
+        tests_by_project:
+          type: array
+          items:
+            type: object
+            properties:
+              project: { type: string }
+              name: { type: string }
+              lead: { type: string }
+              in_test: { type: integer }
+              level: { type: string, enum: ['', warn, bad] }
+        low_sprints:
+          type: array
+          items: { $ref: '#/components/schemas/LowSprint' }
+        risks:
+          type: array
+          items: { $ref: '#/components/schemas/Risk' }
+        creation_spikes:
+          type: array
+          items: { $ref: '#/components/schemas/Spike' }
+        long_in_work:
+          type: array
+          items: { $ref: '#/components/schemas/LongTask' }
+        long_in_test:
+          type: array
+          items: { $ref: '#/components/schemas/LongTask' }
+        blocked:
+          type: array
+          items: { $ref: '#/components/schemas/LongTask' }
+        thresholds:
+          type: object
+          additionalProperties: { type: integer }
