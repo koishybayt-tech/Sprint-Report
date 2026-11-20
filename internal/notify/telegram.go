@@ -89,6 +89,11 @@ func (t *TG) SendID(ctx context.Context, chatID int64, text string) (int64, erro
 	return t.send(ctx, chatID, text, false, nil)
 }
 
+// Edit заменяет текст сообщения бота (без разметки).
+func (t *TG) Edit(ctx context.Context, chatID, messageID int64, text string) error {
+	return t.call(ctx, "editMessageText", map[string]any{"chat_id": chatID, "message_id": messageID, "text": text, "disable_web_page_preview": true}, nil)
+}
+
 // Delete удаляет сообщение бота (Telegram позволяет в течение 48 часов).
 func (t *TG) Delete(ctx context.Context, chatID, messageID int64) error {
 	return t.call(ctx, "deleteMessage", map[string]any{"chat_id": chatID, "message_id": messageID}, nil)

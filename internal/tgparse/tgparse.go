@@ -393,6 +393,19 @@ func mkDate(d, mo int, yr string, sentAt time.Time) (time.Time, bool) {
 	return t, true
 }
 
+// MakeupDates — явные даты отработки из текста («21.11, 28.11»), когда их несколько. Диапазоны («21.11-28.11»)
+// не раскладываются — возвращается nil: это «в эти дни», а не отдельная дата на каждый пропуск.
+func MakeupDates(text string, sentAt time.Time) []string {
+	l := strings.ToLower(text)
+	if reDateRange.MatchString(l) {
+		return nil
+	}
+	if ds := parseDates(l, sentAt); len(ds) > 1 {
+		return ds
+	}
+	return nil
+}
+
 func parseMakeup(s string, sentAt time.Time) Makeup {
 	mk := Makeup{Text: s}
 	l := strings.ToLower(s)

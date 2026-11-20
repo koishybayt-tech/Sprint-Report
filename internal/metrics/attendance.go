@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/adata/reports/internal/tgparse"
 )
 
 // AttRow — событие посещаемости из Telegram с сотрудником и временем сообщения (из БД).
@@ -85,7 +87,7 @@ type StaffRow struct {
 func BuildAttendance(rows []AttRow, rep *SprintReport, abs []AbsenceRow, staff []StaffRow, now time.Time) Attendance {
 	a := Attendance{Ev: []AttEvent{}, Ppl: map[string]AttPerson{}, Abs: []Absence{}, Coll: []string{}, Lead: []string{}, Cpos: map[string]string{}}
 	a.Stamp = now.In(Almaty).Format("2006-01-02T15:04")
-	rows = dedupeAttRows(rows)
+	rows = splitMakeupDates(dedupeAttRows(rows))
 
 	type key struct {
 		emp int64
@@ -325,6 +327,39 @@ func dedupeAttRows(rows []AttRow) []AttRow {
 		}
 		if f.ApprovedBy == "" {
 			f.ApprovedBy = r.ApprovedBy
+		}
+	}
+	return out
+}
+
+// splitMakeupDates: «Пропуск 13.11, 16.11 / Отработка 21.11, 28.11» — отработка разделена на разные дни:
+// первый пропуск отрабатывается в первую дату, второй — во вторую. В базе у всех событий сообщения одна дата отработки
+// (первая), поэтому раскладываем даты по пропускам по порядку; только если дат и пропусков поровну.
+func splitMakeupDates(rows []AttRow) []AttRow {
+	type key struct {
+		emp  int64
+		sent time.Time
+		text string
+	}
+	groups := map[key][]int{}
+	for i, r := range rows {
+		if r.MakeupKind != "date" || r.MakeupText == "" || r.MakeupDate == nil || r.Kind == "sick" || r.Kind == "vac" || r.Kind == "arrived" {
+			continue
+		}
+		k := key{r.EmployeeID, r.SentAt, r.MakeupText}
+		groups[k] = append(groups[k], i)
+	}
+	out := append([]AttRow(nil), rows...)
+	for k, idx := range groups {
+		dates := tgparse.MakeupDates(k.text, k.sent.In(Almaty))
+		if len(dates) < 2 || len(dates) != len(idx) {
+			continue
+		}
+		sort.SliceStable(idx, func(a, b int) bool { return out[idx[a]].Day.Before(out[idx[b]].Day) })
+		for n, i := range idx {
+			if d, err := time.Parse("2006-01-02", dates[n]); err == nil {
+				out[i].MakeupDate = &d
+			}
 		}
 	}
 	return out

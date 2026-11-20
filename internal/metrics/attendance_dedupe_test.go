@@ -47,3 +47,36 @@ func TestDedupeAttRows(t *testing.T) {
 		t.Errorf("Архат: %d мин, ожидали 960 (16 ч, два разных дня)", by["Архат Ерасыл"])
 	}
 }
+
+// «Пропуск 13.11, 16.11 / Отработка 21.11, 28.11»: отработка разделена на две субботы — по 8 ч, а не 16 ч в первую.
+func TestSplitMakeupDates(t *testing.T) {
+	sat1 := time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)
+	i := func(v int) *int { return &v }
+	sent := time.Date(2026, 11, 12, 19, 12, 0, 0, Almaty)
+	mk := func(id int64, day int, text string) AttRow {
+		return AttRow{ID: id, EmployeeID: 1, Name: "Архат Ерасыл", Day: time.Date(2026, 11, day, 0, 0, 0, 0, time.UTC), Kind: "day", FromMin: i(540), ToMin: i(1080),
+			Minutes: 540, MakeupKind: "date", MakeupText: text, MakeupDate: &sat1, SentAt: sent}
+	}
+	rows := []AttRow{mk(1, 13, "21.11, 28.11"), mk(2, 16, "21.11, 28.11")}
+	att := BuildAttendance(rows, &SprintReport{Roles: map[string]string{}, Logins: map[string]string{}}, nil, nil, time.Date(2026, 11, 20, 20, 0, 0, 0, Almaty))
+	for _, sat := range []string{"2026-11-21", "2026-11-28"} {
+		l := SaturdayMakeups(att.Ev, sat)
+		if len(l) != 1 || l[0].Minutes != 480 {
+			t.Errorf("%s: %+v, ожидали одну строку по 480 мин", sat, l)
+		}
+	}
+	// дат и пропусков не поровну — как раньше, всё на первую дату
+	one := BuildAttendance([]AttRow{mk(1, 13, "21.11, 28.11")}, &SprintReport{Roles: map[string]string{}, Logins: map[string]string{}}, nil, nil, time.Now())
+	if l := SaturdayMakeups(one.Ev, "2026-11-21"); len(l) != 1 || l[0].Minutes != 480 {
+		t.Errorf("один пропуск на две даты: %+v", l)
+	}
+	if l := SaturdayMakeups(one.Ev, "2026-11-28"); len(l) != 0 {
+		t.Errorf("вторая суббота без отдельного пропуска пуста: %+v", l)
+	}
+	// диапазон «21.11-28.11» не раскладывается по пропускам
+	r2 := []AttRow{mk(1, 13, "21.11-28.11"), mk(2, 16, "21.11-28.11")}
+	att2 := BuildAttendance(r2, &SprintReport{Roles: map[string]string{}, Logins: map[string]string{}}, nil, nil, time.Now())
+	if l := SaturdayMakeups(att2.Ev, "2026-11-21"); len(l) != 1 || l[0].Minutes != 960 {
+		t.Errorf("диапазон: %+v", l)
+	}
+}

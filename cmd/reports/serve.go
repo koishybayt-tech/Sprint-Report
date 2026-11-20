@@ -148,7 +148,7 @@ func runWorker(ctx context.Context, log *slog.Logger) error {
 			defer t.Stop()
 			for {
 				if now := time.Now(); saturdayDue(now, cfg.TgSaturdayAt) {
-					if err := sendSaturday(ctx, cfg, pool, log, metrics.NextSaturday(now), false, 0); err != nil && ctx.Err() == nil {
+					if err := sendSaturday(ctx, cfg, pool, log, metrics.NextSaturday(now), false, 0, 0); err != nil && ctx.Err() == nil {
 						log.Error("worker: субботние отработки", "err", err)
 					}
 				}
