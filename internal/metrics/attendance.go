@@ -85,6 +85,7 @@ type StaffRow struct {
 func BuildAttendance(rows []AttRow, rep *SprintReport, abs []AbsenceRow, staff []StaffRow, now time.Time) Attendance {
 	a := Attendance{Ev: []AttEvent{}, Ppl: map[string]AttPerson{}, Abs: []Absence{}, Coll: []string{}, Lead: []string{}, Cpos: map[string]string{}}
 	a.Stamp = now.In(Almaty).Format("2006-01-02T15:04")
+	rows = dedupeAttRows(rows)
 
 	type key struct {
 		emp int64
@@ -286,4 +287,45 @@ func RestrictAttendance(a *Attendance, allowed map[string]bool, self string) {
 			delete(a.Cpos, n)
 		}
 	}
+}
+
+// dedupeAttRows убирает повторы одного и того же отсутствия, записанного в нескольких сообщениях
+// (человек написал заново или ответил на своё сообщение): тот же сотрудник, день, вид и время — одно событие.
+// Остаётся первое сообщение; пустые поля (причина, отработка, согласование) добираются из повторов.
+func dedupeAttRows(rows []AttRow) []AttRow {
+	type key struct {
+		emp      int64
+		day      string
+		kind     string
+		from, to int
+		minutes  int
+	}
+	opt := func(v *int) int {
+		if v == nil {
+			return -1
+		}
+		return *v
+	}
+	idx := map[key]int{}
+	out := make([]AttRow, 0, len(rows))
+	for _, r := range rows {
+		k := key{r.EmployeeID, r.Day.Format("2006-01-02"), r.Kind, opt(r.FromMin), opt(r.ToMin), r.Minutes}
+		i, dup := idx[k]
+		if !dup {
+			idx[k] = len(out)
+			out = append(out, r)
+			continue
+		}
+		f := &out[i]
+		if f.Reason == "" {
+			f.Reason, f.ReasonCat = r.Reason, r.ReasonCat
+		}
+		if f.MakeupDate == nil && r.MakeupDate != nil {
+			f.MakeupKind, f.MakeupText, f.MakeupDate = r.MakeupKind, r.MakeupText, r.MakeupDate
+		}
+		if f.ApprovedBy == "" {
+			f.ApprovedBy = r.ApprovedBy
+		}
+	}
+	return out
 }
