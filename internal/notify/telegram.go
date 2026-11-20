@@ -80,12 +80,24 @@ type Button struct {
 
 // Send — обычный текст без разметки.
 func (t *TG) Send(ctx context.Context, chatID int64, text string, buttons ...Button) error {
-	return t.send(ctx, chatID, text, false, buttons)
+	_, err := t.send(ctx, chatID, text, false, buttons)
+	return err
+}
+
+// SendID — то же, но возвращает id отправленного сообщения (чтобы потом при необходимости удалить).
+func (t *TG) SendID(ctx context.Context, chatID int64, text string) (int64, error) {
+	return t.send(ctx, chatID, text, false, nil)
+}
+
+// Delete удаляет сообщение бота (Telegram позволяет в течение 48 часов).
+func (t *TG) Delete(ctx context.Context, chatID, messageID int64) error {
+	return t.call(ctx, "deleteMessage", map[string]any{"chat_id": chatID, "message_id": messageID}, nil)
 }
 
 // SendLinked — то же, но номера задач Jira (AC-123) в тексте становятся ссылками на jiraBase/browse/KEY.
 func (t *TG) SendLinked(ctx context.Context, chatID int64, text, jiraBase string, buttons ...Button) error {
-	return t.send(ctx, chatID, LinkKeys(text, jiraBase), true, buttons)
+	_, err := t.send(ctx, chatID, LinkKeys(text, jiraBase), true, buttons)
+	return err
 }
 
 var reIssueKey = regexp.MustCompile(`\b[A-Z][A-Z0-9_]*-\d+\b`)
@@ -98,7 +110,7 @@ func LinkKeys(text, jiraBase string) string {
 	})
 }
 
-func (t *TG) send(ctx context.Context, chatID int64, text string, asHTML bool, buttons []Button) error {
+func (t *TG) send(ctx context.Context, chatID int64, text string, asHTML bool, buttons []Button) (int64, error) {
 	p := map[string]any{"chat_id": chatID, "text": text, "disable_web_page_preview": true}
 	if asHTML {
 		p["parse_mode"] = "HTML"
@@ -114,7 +126,11 @@ func (t *TG) send(ctx context.Context, chatID int64, text string, asHTML bool, b
 		}
 		p["reply_markup"] = map[string]any{"inline_keyboard": [][]map[string]string{row}}
 	}
-	return t.call(ctx, "sendMessage", p, nil)
+	var sent struct {
+		MessageID int64 `json:"message_id"`
+	}
+	err := t.call(ctx, "sendMessage", p, &sent)
+	return sent.MessageID, err
 }
 
 // Update — то, что нужно от личного бота: /start <код> и нажатия кнопок.

@@ -17,7 +17,8 @@ import (
 	"github.com/adata/reports/internal/notify"
 )
 
-// runTg: reports tg saturday [--date ГГГГ-ММ-ДД] [--send] [--force]
+// runTg: reports tg saturday [--date ГГГГ-ММ-ДД] [--send] [--force] [--delete-id N]
+// --delete-id — перед отправкой удалить прежнее сообщение бота с этим id (замена неверного списка).
 // Без --send только печатает текст сообщения о субботних отработках (предпросмотр); --send — отправляет в группу,
 // --force — даже если на эту субботу уже отправляли.
 func runTg(ctx context.Context, log *slog.Logger, args []string) error {
@@ -27,6 +28,7 @@ func runTg(ctx context.Context, log *slog.Logger, args []string) error {
 	fs := flag.NewFlagSet("tg saturday", flag.ContinueOnError)
 	date := fs.String("date", "", "суббота (по умолчанию — ближайшая)")
 	send := fs.Bool("send", false, "отправить в группу (без флага — только показать текст)")
+	deleteID := fs.Int64("delete-id", 0, "перед отправкой удалить прежнее сообщение бота с этим id")
 	force := fs.Bool("force", false, "отправить, даже если на эту субботу уже отправляли")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -52,7 +54,7 @@ func runTg(ctx context.Context, log *slog.Logger, args []string) error {
 		fmt.Println(msg)
 		return nil
 	}
-	return sendSaturday(ctx, cfg, pool, log, sat, *force)
+	return sendSaturday(ctx, cfg, pool, log, sat, *force, *deleteID)
 }
 
 func saturdayMessage(ctx context.Context, pool *pgxpool.Pool, sat string) (string, int, error) {
@@ -71,7 +73,7 @@ func saturdayMessage(ctx context.Context, pool *pgxpool.Pool, sat string) (strin
 }
 
 // sendSaturday отправляет список в группу «Adata Group» один раз на субботу (отметка — sync_runs, source = tg_saturday).
-func sendSaturday(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.Logger, sat string, force bool) error {
+func sendSaturday(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.Logger, sat string, force bool, deleteID int64) error {
 	if cfg.TgBotToken == "" || cfg.TgChatID == 0 {
 		return errors.New("нет TG_BOT_TOKEN или TG_CHAT_ID")
 	}
@@ -89,8 +91,15 @@ func sendSaturday(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, lo
 	if err != nil {
 		return err
 	}
-	sendErr := notify.NewTG(cfg.TgBotToken).Send(ctx, cfg.TgChatID, msg)
-	stats, _ := json.Marshal(map[string]any{"date": sat, "people": n})
+	tg := notify.NewTG(cfg.TgBotToken)
+	if deleteID > 0 {
+		if err := tg.Delete(ctx, cfg.TgChatID, deleteID); err != nil {
+			return fmt.Errorf("удаление прежнего сообщения %d: %w", deleteID, err)
+		}
+		log.Info("tg saturday: прежнее сообщение удалено", "message_id", deleteID)
+	}
+	msgID, sendErr := tg.SendID(ctx, cfg.TgChatID, msg)
+	stats, _ := json.Marshal(map[string]any{"date": sat, "people": n, "message_id": msgID})
 	var errText *string
 	if sendErr != nil {
 		s := sendErr.Error()
